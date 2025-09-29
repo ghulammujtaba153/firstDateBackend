@@ -3,6 +3,8 @@ import express from "express";
 import dotenv from "dotenv";
 import cors from "cors";
 import pkg from "agora-access-token";
+import { connectDB } from "./database/db.js";
+import router from "./routes/index.js";
 
 const { RtcTokenBuilder, RtcRole } = pkg;
 dotenv.config();
@@ -10,9 +12,9 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Enable CORS for all origins (adjust for production)
+
 app.use(cors({
-  origin: "*", // For development - restrict in production
+  origin: "*", 
   credentials: true
 }));
 
@@ -21,7 +23,11 @@ app.use(express.json());
 const APP_ID = "c905455f70de484ca552c6d1cb4564ba";
 const APP_CERTIFICATE = "65162bc67eb649f8801028f07e9a1195";
 
-// ✅ FIXED: More robust token generation
+connectDB();
+
+
+app.use("/api", router);
+
 app.post("/generate-token", (req, res) => {
   try {
     const { channelName, uid } = req.body;
@@ -98,7 +104,6 @@ app.get("/health", (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📊 Health check: http://localhost:${PORT}/health`);
   console.log(`🔧 Environment check:`, {
     APP_ID: APP_ID ? `${APP_ID.substring(0, 8)}...` : 'MISSING',
     APP_CERTIFICATE: APP_CERTIFICATE ? 'SET' : 'MISSING'
