@@ -1,0 +1,63 @@
+# ───────────────
+# Node
+# ───────────────
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Dependency locks (optional - keep if you want reproducible installs)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# ───────────────
+# Environment
+# ───────────────
+.env
+.env.local
+.env.*.local
+
+# ───────────────
+# Logs
+# ───────────────
+logs/
+*.log
+*.out
+*.err
+
+# ───────────────
+# Build / Dist
+# ───────────────
+dist/
+build/
+tmp/
+.temp/
+
+# ───────────────
+# Coverage / Testing
+# ───────────────
+coverage/
+.nyc_output/
+
+# ───────────────
+# Cache
+# ───────────────
+.cache/
+*.tsbuildinfo
+
+# ───────────────
+# IDE / Editors
+# ───────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# ───────────────
+# Misc
+# ───────────────
+*.pid
+*.seed
+*.tgz
