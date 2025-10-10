@@ -7,11 +7,10 @@ const userSchema = new mongoose.Schema({
   },
   phone: {
     type: String,
-    unique: true,
   },
   password: {
     type: String,
-    required: true,
+    
   },
   username: {
     type: String,
@@ -24,7 +23,7 @@ const userSchema = new mongoose.Schema({
     type: String,
   },
   dob: {
-    type: Date,
+    type: String,
   },
   height: {
     type: Number,
@@ -41,17 +40,14 @@ const userSchema = new mongoose.Schema({
   education: {
     field: {
       type: String,
-      required: true, // make it optional if you want
       trim: true,
     },
     occupation: {
       type: String,
-      required: true,
       trim: true,
     },
     university: {
       type: String,
-      required: true,
       trim: true,
     },
   },
@@ -62,7 +58,8 @@ const userSchema = new mongoose.Schema({
     type: [String],
   },
   location: {
-    type: String,
+    latitude: { type: Number },
+    longitude: { type: Number }
   },
   partnerAge: {
     min: { type: Number },
@@ -78,6 +75,14 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  googleId: {
+    type: String,
+    unique: true,
+  },
+  onboardingComlete: {
+    type: Boolean,
+    default: false,
+  }
 
 }, { timestamps: true });
 

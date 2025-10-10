@@ -5,6 +5,7 @@ import cors from "cors";
 import pkg from "agora-access-token";
 import { connectDB } from "./database/db.js";
 import router from "./routes/index.js";
+import passport from "./config/passport.js";
 
 const { RtcTokenBuilder, RtcRole } = pkg;
 dotenv.config();
@@ -24,6 +25,47 @@ const APP_ID = "c905455f70de484ca552c6d1cb4564ba";
 const APP_CERTIFICATE = "65162bc67eb649f8801028f07e9a1195";
 
 connectDB();
+
+app.use(passport.initialize());
+
+
+
+// server.js - Updated callback route
+app.get(
+  '/auth/google/callback',
+  passport.authenticate('google', {
+    failureRedirect: '/login',
+    session: false
+  }),
+  (req, res) => {
+    try {
+      const user = req.user;
+      
+      if (!user) {
+        console.error("No user in request");
+        return res.redirect(`${process.env.CLIENT_URL}/login?error=no_user`);
+      }
+
+      // ✅ Check if token exists on user object
+      if (!user.token) {
+        console.error("No token generated for user:", user._id);
+        return res.redirect(`${process.env.CLIENT_URL}/login?error=token_generation_failed`);
+      }
+
+      const redirectPath = req.query.state || '/google-auth';
+      
+      console.log("OAuth successful, redirecting with token");
+      
+      // ✅ Properly encode the token for URL
+      const encodedToken = encodeURIComponent(user.token);
+      res.redirect(`${process.env.CLIENT_URL}${redirectPath}?token=${encodedToken}`);
+      
+    } catch (error) {
+      console.error("OAuth callback error:", error);
+      res.redirect(`${process.env.CLIENT_URL}/login?error=oauth_failed`);
+    }
+  }
+);
 
 
 app.use("/api", router);
@@ -92,20 +134,9 @@ app.post("/generate-token", (req, res) => {
   }
 });
 
-// Health check endpoint
-app.get("/health", (req, res) => {
-  res.json({ 
-    status: "OK", 
-    hasAppId: !!APP_ID,
-    hasCertificate: !!APP_CERTIFICATE,
-    timestamp: new Date().toISOString()
-  });
-});
+
 
 app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`🔧 Environment check:`, {
-    APP_ID: APP_ID ? `${APP_ID.substring(0, 8)}...` : 'MISSING',
-    APP_CERTIFICATE: APP_CERTIFICATE ? 'SET' : 'MISSING'
-  });
+ 
 });
