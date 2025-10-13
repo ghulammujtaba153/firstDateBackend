@@ -71,7 +71,7 @@ const userSchema = new mongoose.Schema({
   partnerHealth: { type: [String]},
   partnerHobbies: { type: [String]},
   partnerLocation: { type: String},
-  verfied: {
+  verified: {
     type: Boolean,
     default: false,
   },
