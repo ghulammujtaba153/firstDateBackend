@@ -6,6 +6,12 @@ import pkg from "agora-access-token";
 import { connectDB } from "./database/db.js";
 import router from "./routes/index.js";
 import passport from "./config/passport.js";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// Get __dirname equivalent in ES modules
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const { RtcTokenBuilder, RtcRole } = pkg;
 dotenv.config();
@@ -20,6 +26,9 @@ app.use(cors({
 }));
 
 app.use(express.json());
+
+// Serve static files from uploads directory
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 const APP_ID = "c905455f70de484ca552c6d1cb4564ba";
 const APP_CERTIFICATE = "65162bc67eb649f8801028f07e9a1195";
@@ -130,6 +139,59 @@ app.post("/generate-token", (req, res) => {
     res.status(500).json({ 
       error: "Failed to generate token",
       details: error.message 
+    });
+  }
+});
+
+
+
+app.post("/api/verify-face", async (req, res) => {
+  const { selfie, idImage } = req.body;
+  
+  // Debug logging
+  console.log("Didit Secret Loaded:", process.env.DIDIT_SECRET ? "✅ Yes" : "❌ Missing");
+  console.log("API Key (first 20 chars):", process.env.DIDIT_SECRET?.substring(0, 20) + "...");
+  console.log("Full Auth Header:", `Bearer ${process.env.DIDIT_SECRET}`);
+  
+  // Validate inputs
+  if (!selfie || !idImage) {
+    return res.status(400).json({ 
+      message: "Both selfie and idImage are required" 
+    });
+  }
+  
+  try {
+    const response = await fetch("https://api.didit.me/v1/face/compare", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": process.env.DIDIT_SECRET, // Try without "Bearer" prefix
+      },
+      body: JSON.stringify({
+        image1: selfie,
+        image2: idImage,
+      }),
+    });
+    
+    const data = await response.json();
+    
+    // Handle non-2xx responses
+    if (!response.ok) {
+      console.error("Didit API Error:", response.status, data);
+      return res.status(response.status).json({
+        message: "Face verification failed",
+        details: data,
+      });
+    }
+    
+    console.log("Face verification successful:", data);
+    res.status(200).json(data);
+    
+  } catch (error) {
+    console.error("Error verifying faces:", error);
+    res.status(500).json({ 
+      message: "Face verification failed",
+      error: error.message 
     });
   }
 });
