@@ -39,7 +39,7 @@ app.use(passport.initialize());
 
 
 
-// server.js - Updated callback route
+
 app.get(
   '/auth/google/callback',
   passport.authenticate('google', {
@@ -148,7 +148,7 @@ app.post("/generate-token", (req, res) => {
 app.post("/api/verify-face", async (req, res) => {
   const { selfie, idImage } = req.body;
   
-  // Debug logging
+  
   console.log("Didit Secret Loaded:", process.env.DIDIT_SECRET ? "✅ Yes" : "❌ Missing");
   console.log("API Key (first 20 chars):", process.env.DIDIT_SECRET?.substring(0, 20) + "...");
   console.log("Full Auth Header:", `Bearer ${process.env.DIDIT_SECRET}`);
