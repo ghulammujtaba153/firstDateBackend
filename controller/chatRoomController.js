@@ -105,6 +105,16 @@ export const sendMessage = async (req, res) => {
     });
 
     const populatedMessage = await message.populate("sender", "username email avatar");
+    
+    // Emit Socket.io event to notify all users in the chat room
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`chat:${chatId}`).emit('message:new', {
+        chatId,
+        message: populatedMessage
+      });
+    }
+
     res.status(201).json(populatedMessage);
   } catch (error) {
     res.status(500).json({ error: error.message });

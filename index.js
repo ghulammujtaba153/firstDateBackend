@@ -8,6 +8,11 @@ import router from "./routes/index.js";
 import passport from "./config/passport.js";
 import path from "path";
 import { fileURLToPath } from "url";
+import multer from "multer";
+import FormData from "form-data";
+import { createServer } from "http";
+import { Server } from "socket.io";
+import { initializeSocket } from "./socket/socketHandler.js";
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -18,6 +23,22 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+// Create HTTP server and Socket.io instance
+const httpServer = createServer(app);
+const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.CLIENT_URL || "*",
+    methods: ["GET", "POST"],
+    credentials: true
+  }
+});
+
+// Initialize Socket.io handlers
+initializeSocket(io);
+
+// Make io available globally for use in routes/controllers
+app.set('io', io);
 
 
 app.use(cors({
@@ -145,60 +166,138 @@ app.post("/generate-token", (req, res) => {
 
 
 
-app.post("/api/verify-face", async (req, res) => {
-  const { selfie, idImage } = req.body;
-  
-  
-  console.log("Didit Secret Loaded:", process.env.DIDIT_SECRET ? "✅ Yes" : "❌ Missing");
-  console.log("API Key (first 20 chars):", process.env.DIDIT_SECRET?.substring(0, 20) + "...");
-  console.log("Full Auth Header:", `Bearer ${process.env.DIDIT_SECRET}`);
-  
-  // Validate inputs
-  if (!selfie || !idImage) {
-    return res.status(400).json({ 
-      message: "Both selfie and idImage are required" 
-    });
-  }
-  
-  try {
-    const response = await fetch("https://api.didit.me/v1/face/compare", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Authorization": process.env.DIDIT_SECRET, // Try without "Bearer" prefix
-      },
-      body: JSON.stringify({
-        image1: selfie,
-        image2: idImage,
-      }),
-    });
-    
-    const data = await response.json();
-    
-    // Handle non-2xx responses
-    if (!response.ok) {
-      console.error("Didit API Error:", response.status, data);
-      return res.status(response.status).json({
-        message: "Face verification failed",
-        details: data,
-      });
-    }
-    
-    console.log("Face verification successful:", data);
-    res.status(200).json(data);
-    
-  } catch (error) {
-    console.error("Error verifying faces:", error);
-    res.status(500).json({ 
-      message: "Face verification failed",
-      error: error.message 
-    });
-  }
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB per file (adjust as needed)
 });
 
+app.post(
+  "/api/verify-face",
+  upload.fields([
+    { name: "user_image", maxCount: 1 },
+    { name: "ref_image", maxCount: 1 },
+  ]),
+  async (req, res) => {
+    try {
+      if (!process.env.DIDIT_API_KEY) {
+        console.error("Missing DIDIT_API_KEY");
+        return res.status(500).json({ message: "Server missing DIDIT_API_KEY" });
+      }
+
+      const files = req.files || {};
+      const userFile = files.user_image?.[0];
+      const refFile = files.ref_image?.[0];
+
+      if (!userFile || !refFile) {
+        return res.status(400).json({ message: "Both user_image and ref_image are required" });
+      }
+
+      console.log("verify-face request: user_image size:", userFile.size, "mimetype:", userFile.mimetype);
+      console.log("verify-face request: ref_image size:", refFile.size, "mimetype:", refFile.mimetype);
+
+      const form = new FormData();
+      // ensure sensible filenames / extensions
+      form.append("user_image", userFile.buffer, {
+        filename: userFile.originalname || "selfie.jpg",
+        contentType: userFile.mimetype || "image/jpeg",
+      });
+      form.append("ref_image", refFile.buffer, {
+        filename: refFile.originalname || "id.jpg",
+        contentType: refFile.mimetype || "image/jpeg",
+      });
+
+      // compute content-length (some APIs reject chunked requests)
+      const contentLength = await new Promise((resolve) => {
+        form.getLength((err, length) => {
+          if (err) {
+            console.warn("Could not compute form length:", err.message);
+            return resolve(null);
+          }
+          resolve(length);
+        });
+      });
+
+      const formHeaders = form.getHeaders();
+
+      // If we were able to compute length and all parts are buffers (no streams),
+      // build a single Buffer body to ensure content-length matches actual bytes.
+      let requestBody = form;
+      if (contentLength) {
+        try {
+          // form-data's getBuffer() works only when no streams are present.
+          const bodyBuffer = form.getBuffer();
+          if (bodyBuffer && Buffer.isBuffer(bodyBuffer)) {
+            formHeaders["content-length"] = bodyBuffer.length;
+            requestBody = bodyBuffer;
+          } else {
+            // fallback: don't set content-length and send stream
+            delete formHeaders["content-length"];
+          }
+        } catch (err) {
+          console.warn("form.getBuffer() unavailable — sending streamed body:", err.message);
+          delete formHeaders["content-length"];
+        }
+      }
+
+      console.log("Outgoing Didit request headers:", {
+        ...formHeaders,
+        "x-api-key": process.env.DIDIT_API_KEY ? "[REDACTED]" : null,
+      });
+
+      const response = await fetch("https://verification.didit.me/v2/face-match/", {
+        method: "POST",
+        headers: {
+          accept: "application/json",
+          "x-api-key": process.env.DIDIT_API_KEY,
+          ...formHeaders,
+        },
+        body: requestBody,
+      });
+
+      const status = response.status;
+      const respHeaders = Object.fromEntries(response.headers.entries());
+      let rawText = "";
+      try {
+        rawText = await response.text();
+      } catch (err) {
+        console.warn("Failed to read response body as text:", err.message);
+      }
+
+      let parsed = null;
+      if (rawText) {
+        try {
+          parsed = JSON.parse(rawText);
+        } catch (err) {
+          parsed = { raw: rawText, parseError: err.message };
+        }
+      }
+
+      console.log("Didit response status:", status);
+      console.log("Didit response headers:", respHeaders);
+      console.log("Didit response body (truncated):", (rawText || "").slice(0, 1000));
+
+      if (!response.ok) {
+        // include headers + body to help debug 400 responses
+        return res.status(status).json({
+          message: "Face verification failed",
+          details: parsed ?? rawText ?? null,
+          diditStatus: status,
+          diditHeaders: respHeaders,
+        });
+      }
+
+      // success
+      return res.status(200).json(parsed ?? { message: "No JSON returned from Didit API", raw: rawText });
+    } catch (error) {
+      console.error("Error verifying faces:", error);
+      return res.status(500).json({ message: "Face verification failed", error: error.message });
+    }
+  }
+);
 
 
-app.listen(PORT, () => {
+// Use httpServer instead of app.listen for Socket.io
+httpServer.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
- 
+  console.log(`📡 Socket.io server initialized`);
 });
