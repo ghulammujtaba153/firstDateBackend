@@ -1,12 +1,18 @@
 import Otp from "../models/otp.js";
 import User from "../models/user.js";
-import { transporter } from "../utils/mailer.js";
+import { emailApi } from "../utils/mailer.js";
 
 
 export const sendOtp = async (req, res) => {
   const { email, registration } = req.body;
 
   try {
+    // Basic env check for Brevo client
+    if (!emailApi) {
+      console.error("Brevo email client not initialized (BREVO_API_KEY missing)");
+      return res.status(500).json({ error: "Email service not configured" });
+    }
+
     // Check user existence based on registration flag
     const user = await User.findOne({ email });
 
@@ -43,42 +49,50 @@ export const sendOtp = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    // Send OTP via email
-    await transporter.sendMail({
-      from: `"Your App" <${process.env.EMAIL_USER}>`,
-      to: email,
+    // Prepare sender + payload for Brevo
+    const sender = {
+      name: process.env.BREVO_SENDER_NAME || "Your App",
+      email: process.env.BREVO_SENDER_EMAIL || process.env.BREVO_FROM || "no-reply@example.com",
+    };
+
+    const sendSmtpEmail = {
       subject: "Your OTP Code",
-      text: `Your OTP code is ${otpCode}. It will expire in 5 minutes.`,
-      html: `<h2>OTP Verification</h2>
-             <p>Your OTP code is: <b>${otpCode}</b></p>
-             <p>This code will expire in <b>5 minutes</b>.</p>`,
-    });
+      sender,
+      to: [{ email, name: user?.name || undefined }],
+      htmlContent: `<h2>OTP Verification</h2>
+                    <p>Your OTP code is: <b>${otpCode}</b></p>
+                    <p>This code will expire in <b>5 minutes</b>.</p>`,
+      textContent: `Your OTP code is ${otpCode}. It will expire in 5 minutes.`,
+    };
+
+    // Send via Brevo
+    const response = await emailApi.sendTransacEmail(sendSmtpEmail);
+    console.log("Brevo sendTransacEmail response:", response);
 
     return res.status(200).json({ message: "OTP sent successfully" });
   } catch (error) {
-    console.error("Send OTP error:", error.message);
+    console.error("Send OTP error:", error?.response || error?.message || error);
     return res.status(500).json({ error: "Server error" });
   }
 };
 
 
 
-
 export const verifyOtp = async (req, res) => {
-    const { email, otp } = req.body; // changed here
+  const { email, otp } = req.body;
 
-    try {
-        const record = await Otp.findOne({ email, code: otp }); // map otp → code
+  try {
+    const record = await Otp.findOne({ email, code: otp });
 
-        if (!record) {
-            return res.status(401).json({ message: 'Invalid OTP' });
-        }
-
-        await Otp.deleteOne({ email, code: otp });
-        
-        res.status(200).json({ message: 'OTP verified successfully' });
-    } catch (error) {
-        console.error("Verify OTP error:", error.message);
-        res.status(500).json({ error: "Server error" });
+    if (!record) {
+      return res.status(401).json({ message: "Invalid OTP" });
     }
+
+    await Otp.deleteOne({ email, code: otp });
+
+    res.status(200).json({ message: "OTP verified successfully" });
+  } catch (error) {
+    console.error("Verify OTP error:", error.message);
+    res.status(500).json({ error: "Server error" });
+  }
 };
