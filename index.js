@@ -120,8 +120,29 @@ app.post("/generate-token", (req, res) => {
       });
     }
 
-    // Convert uid to number if it's a string
-    const numericUid = typeof uid === 'string' ? parseInt(uid) : uid;
+    // Generate unique numeric UID from string (MongoDB ObjectId)
+    // Use a hash function to convert ObjectId string to unique numeric value
+    let numericUid;
+    if (typeof uid === 'string') {
+      // Simple hash function to convert string to unique number
+      // This ensures different ObjectIds produce different numeric UIDs
+      let hash = 0;
+      for (let i = 0; i < uid.length; i++) {
+        const char = uid.charCodeAt(i);
+        hash = ((hash << 5) - hash) + char;
+        hash = hash & hash; // Convert to 32-bit integer
+      }
+      // Ensure positive number and within Agora's UID range (0 to 2^32-1)
+      numericUid = Math.abs(hash) % 2147483647; // Max safe integer for Agora
+    } else {
+      numericUid = uid;
+    }
+    
+    console.log("UID conversion:", {
+      original: uid,
+      numeric: numericUid,
+      type: typeof numericUid
+    });
     
     const role = RtcRole.PUBLISHER;
     const expirationTimeInSeconds = 3600; // 1 hour
