@@ -14,7 +14,7 @@ const userSchema = new mongoose.Schema({
   },
   username: {
     type: String,
-    unique: true,
+    // unique: true,
   },
   gender: {
     type: String,
@@ -61,6 +61,14 @@ const userSchema = new mongoose.Schema({
     latitude: { type: Number },
     longitude: { type: Number }
   },
+  personality: { type: [String]},
+  politics: { type: String},
+  religion: { type: String},
+  family: {
+    haveKids: { type: Boolean },
+    wantKids: { type: Boolean },
+  },
+  chatOpeners: { type: [String]},
   partnerAge: {
     min: { type: Number },
     max: { type: Number },
@@ -71,6 +79,7 @@ const userSchema = new mongoose.Schema({
   partnerHealth: { type: [String]},
   partnerHobbies: { type: [String]},
   partnerLocation: { type: String},
+  partnerPersonality: { type: [String]},
   verified: {
     type: Boolean,
     default: false,
