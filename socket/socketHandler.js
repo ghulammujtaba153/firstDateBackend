@@ -22,6 +22,7 @@ export const initializeSocket = (io) => {
       }
 
       // Store user connection
+      const wasAlreadyOnline = onlineUsers.has(userId);
       if (!onlineUsers.has(userId)) {
         onlineUsers.set(userId, new Set());
       }
@@ -31,8 +32,15 @@ export const initializeSocket = (io) => {
       // Join user's personal room
       socket.join(`user:${userId}`);
 
-      // Notify others that this user is online
-      socket.broadcast.emit('user:online', { userId });
+      // Send current online users list to the newly connected user (excluding self)
+      const currentOnlineUsers = Array.from(onlineUsers.keys()).filter(id => id !== userId);
+      socket.emit('users:online', { users: currentOnlineUsers });
+
+      // Only notify others if this is the first socket for this user
+      // (prevents duplicate notifications for multiple tabs)
+      if (!wasAlreadyOnline) {
+        socket.broadcast.emit('user:online', { userId });
+      }
 
       console.log(`User ${userId} connected (socket: ${socket.id})`);
       console.log(`Total online users: ${onlineUsers.size}`);
