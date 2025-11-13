@@ -102,7 +102,12 @@ const userSchema = new mongoose.Schema({
   onboardingComlete: {
     type: Boolean,
     default: false,
-  }
+  },
+  status: {
+    type: String,
+    enum: ['active', 'inactive', 'blocked'],
+    default: 'active',
+  },
 
 }, { timestamps: true });
 
