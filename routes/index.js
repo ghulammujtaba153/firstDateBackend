@@ -14,6 +14,7 @@ import uploadRouter from './uploadRoutes.js';
 import diditRouter from './diditRoutes.js';
 import paymentRouter from './paymentRoutes.js';
 import appSubscriptionRouter from './appSubscriptionRoutes.js';
+import supportRouter from './supportRoutes.js';
 
 const router = express.Router();
 
@@ -33,6 +34,7 @@ router.use("/upload", uploadRouter)
 router.use("/payments", paymentRouter)
 router.use("/app-subscriptions", appSubscriptionRouter)
 router.use("/", diditRouter)
+router.use("/support", supportRouter)
 
 export default router;
 

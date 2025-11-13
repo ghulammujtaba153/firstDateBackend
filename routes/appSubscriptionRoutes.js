@@ -1,9 +1,12 @@
 import express from 'express';
 import { 
   createSubscriptionCheckout,
+  verifyCheckoutSession,
   getUserSubscription,
   cancelSubscription,
   handleStripeWebhook,
+  getSubscriptionStats,
+  getAllSubscriptionsForAdmin,
 } from '../controller/appSubscriptionController.js';
 
 const appSubscriptionRouter = express.Router();
@@ -17,8 +20,13 @@ appSubscriptionRouter.post(
 
 // Subscription routes
 appSubscriptionRouter.post('/checkout', createSubscriptionCheckout);
+appSubscriptionRouter.post('/verify-session', verifyCheckoutSession);
 appSubscriptionRouter.get('/user/:userId', getUserSubscription);
 appSubscriptionRouter.post('/cancel', cancelSubscription);
+
+// Admin routes
+appSubscriptionRouter.get('/admin/stats', getSubscriptionStats);
+appSubscriptionRouter.get('/admin/all', getAllSubscriptionsForAdmin);
 
 export default appSubscriptionRouter;
 

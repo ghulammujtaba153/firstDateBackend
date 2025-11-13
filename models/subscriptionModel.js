@@ -36,9 +36,15 @@ const subscriptionSchema = new mongoose.Schema({
   },
   currentPeriodStart: {
     type: Date,
+    default: Date.now,
   },
   currentPeriodEnd: {
     type: Date,
+    default: function() {
+      const date = new Date();
+      date.setDate(date.getDate() + 30); // Default to 30 days
+      return date;
+    },
   },
   cancelAtPeriodEnd: {
     type: Boolean,

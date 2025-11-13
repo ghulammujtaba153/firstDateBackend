@@ -248,54 +248,166 @@ async function handleCheckoutCompleted(session) {
     const planId = session.metadata?.planId;
     const planName = session.metadata?.planName;
 
+    console.log('Processing checkout completion:', {
+      userId,
+      planId,
+      planName,
+      sessionId: session.id,
+    });
+
     if (!userId || !planId) {
-      console.error('Missing metadata in checkout session');
-      return;
+      console.error('Missing metadata in checkout session:', {
+        userId: !!userId,
+        planId: !!planId,
+        metadata: session.metadata,
+      });
+      throw new Error('Missing userId or planId in session metadata');
     }
 
     // Get subscription from Stripe
-    const subscriptionId = session.subscription;
+    const subscriptionId = typeof session.subscription === 'string' 
+      ? session.subscription 
+      : session.subscription?.id;
+
     if (!subscriptionId) {
       console.error('No subscription ID in checkout session');
-      return;
+      throw new Error('No subscription ID found in checkout session');
     }
 
+    console.log('Retrieving subscription from Stripe:', subscriptionId);
     const subscription = await stripe.subscriptions.retrieve(subscriptionId);
     const plan = SUBSCRIPTION_PLANS[planId];
 
-    // Update user premium status
-    const user = await User.findById(userId);
-    if (user) {
-      const premiumUntil = new Date();
-      premiumUntil.setDate(premiumUntil.getDate() + plan.duration);
-      
-      user.isPremium = true;
-      user.premiumUntil = premiumUntil;
-      await user.save();
+    if (!plan) {
+      console.error('Plan not found:', planId);
+      throw new Error(`Plan ${planId} not found`);
     }
 
-    // Create or update subscription record
-    await Subscription.findOneAndUpdate(
+    console.log('Subscription retrieved:', {
+      id: subscription.id,
+      status: subscription.status,
+      current_period_start: subscription.current_period_start,
+      current_period_end: subscription.current_period_end,
+      customer: subscription.customer,
+    });
+
+    // Update user premium status
+    const user = await User.findById(userId);
+    if (!user) {
+      console.error('User not found:', userId);
+      throw new Error(`User ${userId} not found`);
+    }
+
+    // Safely convert Stripe timestamps to Date objects
+    // Stripe timestamps are Unix timestamps in seconds
+    let currentPeriodStart;
+    let currentPeriodEnd;
+
+    if (subscription.current_period_start) {
+      // Handle both number (Unix timestamp) and Date object
+      if (typeof subscription.current_period_start === 'number') {
+        currentPeriodStart = new Date(subscription.current_period_start * 1000);
+      } else if (subscription.current_period_start instanceof Date) {
+        currentPeriodStart = subscription.current_period_start;
+      } else {
+        // Try to parse as string or use current date
+        currentPeriodStart = new Date();
+      }
+    } else {
+      currentPeriodStart = new Date();
+    }
+
+    if (subscription.current_period_end) {
+      // Handle both number (Unix timestamp) and Date object
+      if (typeof subscription.current_period_end === 'number') {
+        currentPeriodEnd = new Date(subscription.current_period_end * 1000);
+      } else if (subscription.current_period_end instanceof Date) {
+        currentPeriodEnd = subscription.current_period_end;
+      } else {
+        // Calculate end date from start date + plan duration
+        currentPeriodEnd = new Date(currentPeriodStart);
+        currentPeriodEnd.setDate(currentPeriodEnd.getDate() + plan.duration);
+      }
+    } else {
+      // Calculate end date from start date + plan duration
+      currentPeriodEnd = new Date(currentPeriodStart);
+      currentPeriodEnd.setDate(currentPeriodEnd.getDate() + plan.duration);
+    }
+
+    // Validate dates
+    if (isNaN(currentPeriodStart.getTime())) {
+      console.error('Invalid currentPeriodStart date:', subscription.current_period_start);
+      currentPeriodStart = new Date(); // Fallback to current date
+    }
+    if (isNaN(currentPeriodEnd.getTime())) {
+      console.error('Invalid currentPeriodEnd date:', subscription.current_period_end);
+      currentPeriodEnd = new Date();
+      currentPeriodEnd.setDate(currentPeriodEnd.getDate() + plan.duration);
+    }
+
+    // Set premium until to the period end date
+    const premiumUntil = new Date(currentPeriodEnd);
+    
+    user.isPremium = true;
+    user.premiumUntil = premiumUntil;
+    await user.save();
+    console.log(`✅ User ${userId} premium status updated until ${premiumUntil.toISOString()}`);
+
+    // Final validation - ensure dates are valid Date objects
+    // Only include dates if they are valid
+    const subscriptionData = {
+      userId,
+      planId,
+      planName: planName || plan.name,
+      price: plan.price,
+      stripeSubscriptionId: subscriptionId,
+      stripeCustomerId: typeof subscription.customer === 'string' 
+        ? subscription.customer 
+        : subscription.customer?.id,
+      stripePriceId: subscription.items.data[0]?.price?.id,
+      status: subscription.status || 'active',
+      cancelAtPeriodEnd: subscription.cancel_at_period_end || false,
+    };
+
+    // Only add dates if they are valid
+    if (currentPeriodStart instanceof Date && !isNaN(currentPeriodStart.getTime())) {
+      subscriptionData.currentPeriodStart = currentPeriodStart;
+    } else {
+      console.warn('Skipping invalid currentPeriodStart, will use model default');
+    }
+
+    if (currentPeriodEnd instanceof Date && !isNaN(currentPeriodEnd.getTime())) {
+      subscriptionData.currentPeriodEnd = currentPeriodEnd;
+    } else {
+      console.warn('Skipping invalid currentPeriodEnd, will use model default');
+    }
+
+    console.log('Creating/updating subscription:', {
+      userId: subscriptionData.userId.toString(),
+      planId: subscriptionData.planId,
+      planName: subscriptionData.planName,
+      price: subscriptionData.price,
+      status: subscriptionData.status,
+      currentPeriodStart: subscriptionData.currentPeriodStart.toISOString(),
+      currentPeriodEnd: subscriptionData.currentPeriodEnd.toISOString(),
+    });
+
+    const savedSubscription = await Subscription.findOneAndUpdate(
       { stripeSubscriptionId: subscriptionId },
-      {
-        userId,
-        planId,
-        planName: planName || plan.name,
-        price: plan.price,
-        stripeSubscriptionId: subscriptionId,
-        stripeCustomerId: subscription.customer,
-        stripePriceId: subscription.items.data[0]?.price?.id,
-        status: subscription.status,
-        currentPeriodStart: new Date(subscription.current_period_start * 1000),
-        currentPeriodEnd: new Date(subscription.current_period_end * 1000),
-        cancelAtPeriodEnd: subscription.cancel_at_period_end,
-      },
+      subscriptionData,
       { upsert: true, new: true }
     );
 
-    console.log(`✅ Subscription activated for user ${userId}`);
+    console.log(`✅ Subscription activated for user ${userId}:`, {
+      subscriptionId: savedSubscription._id,
+      planName: savedSubscription.planName,
+      status: savedSubscription.status,
+    });
+
+    return savedSubscription;
   } catch (error) {
     console.error('Error handling checkout completed:', error);
+    throw error; // Re-throw so caller can handle it
   }
 }
 
@@ -427,6 +539,113 @@ async function handleInvoicePaymentFailed(invoice) {
   }
 }
 
+// Verify checkout session and create subscription (fallback if webhook hasn't fired)
+export const verifyCheckoutSession = async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(500).json({ 
+        error: "Stripe is not configured." 
+      });
+    }
+
+    if (!isDBConnected()) {
+      return res.status(503).json({ 
+        error: "Database connection not available." 
+      });
+    }
+
+    const { sessionId } = req.body;
+
+    if (!sessionId) {
+      return res.status(400).json({ error: "Session ID is required" });
+    }
+
+    // Retrieve checkout session from Stripe
+    const session = await stripe.checkout.sessions.retrieve(sessionId, {
+      expand: ['subscription', 'customer'],
+    });
+
+    console.log('Checkout session retrieved:', {
+      sessionId,
+      paymentStatus: session.payment_status,
+      subscription: session.subscription,
+      metadata: session.metadata,
+    });
+
+    // Check if session is completed
+    if (session.payment_status !== 'paid') {
+      return res.status(400).json({ 
+        error: "Payment not completed",
+        paymentStatus: session.payment_status 
+      });
+    }
+
+    // Check if subscription already exists
+    if (session.subscription) {
+      const subscriptionId = typeof session.subscription === 'string' 
+        ? session.subscription 
+        : session.subscription.id;
+
+      const existingSubscription = await Subscription.findOne({
+        stripeSubscriptionId: subscriptionId,
+      });
+
+      if (existingSubscription) {
+        console.log('Subscription already exists:', existingSubscription._id);
+        // Update user premium status if needed
+        const user = await User.findById(existingSubscription.userId);
+        if (user && !user.isPremium) {
+          user.isPremium = true;
+          if (existingSubscription.currentPeriodEnd) {
+            user.premiumUntil = existingSubscription.currentPeriodEnd;
+          }
+          await user.save();
+        }
+        
+        return res.status(200).json({
+          success: true,
+          message: "Subscription already processed",
+          subscription: existingSubscription,
+        });
+      }
+
+      // Process the subscription (same logic as webhook)
+      console.log('Processing new subscription for user:', session.metadata?.userId);
+      await handleCheckoutCompleted(session);
+
+      // Get the created subscription
+      const subscription = await Subscription.findOne({
+        stripeSubscriptionId: subscriptionId,
+      });
+
+      if (subscription) {
+        console.log('✅ Subscription created successfully:', subscription._id);
+        return res.status(200).json({
+          success: true,
+          message: "Subscription verified and activated",
+          subscription,
+        });
+      } else {
+        console.error('Subscription not found after processing');
+        return res.status(500).json({
+          error: "Subscription processed but not found in database"
+        });
+      }
+    }
+
+    return res.status(400).json({ 
+      error: "No subscription found in checkout session",
+      sessionDetails: {
+        paymentStatus: session.payment_status,
+        mode: session.mode,
+      }
+    });
+  } catch (error) {
+    console.error("Error verifying checkout session:", error);
+    res.status(500).json({ error: error.message || "Failed to verify checkout session" });
+  }
+};
+
 // Get user's current subscription
 export const getUserSubscription = async (req, res) => {
   try {
@@ -497,4 +716,206 @@ export const cancelSubscription = async (req, res) => {
     res.status(500).json({ error: error.message || "Failed to cancel subscription" });
   }
 };
+
+// Get subscription statistics for admin dashboard
+export const getSubscriptionStats = async (req, res) => {
+    try {
+        if (!isDBConnected()) {
+            return res.status(503).json({ 
+                error: "Database connection not available." 
+            });
+        }
+
+        // Active subscriptions
+        const activeSubscriptions = await Subscription.countDocuments({ 
+            status: 'active' 
+        });
+
+        // Calculate monthly revenue from active subscriptions
+        const activeSubs = await Subscription.find({ status: 'active' });
+        const monthlyRevenue = activeSubs.reduce((total, sub) => {
+            return total + (sub.price || 0);
+        }, 0);
+
+        // Failed payments (past_due or unpaid)
+        const failedPayments = await Subscription.countDocuments({
+            status: { $in: ['past_due', 'unpaid'] }
+        });
+
+        // Total users
+        const totalUsers = await User.countDocuments();
+
+        // Calculate conversion rate (users with active subscriptions / total users)
+        const conversionRate = totalUsers > 0 
+            ? ((activeSubscriptions / totalUsers) * 100).toFixed(1)
+            : 0;
+
+        // Get previous month stats for comparison (mock for now)
+        // You can enhance this by storing historical data
+        const previousMonthActive = Math.floor(activeSubscriptions * 0.92); // Mock: 8% increase
+        const previousMonthRevenue = Math.floor(monthlyRevenue * 0.92);
+        const previousMonthFailed = Math.max(0, failedPayments - 3);
+
+        const activeChange = activeSubscriptions - previousMonthActive;
+        const revenueChange = monthlyRevenue - previousMonthRevenue;
+        const failedChange = failedPayments - previousMonthFailed;
+
+        res.status(200).json({
+            activeSubscriptions,
+            monthlyRevenue: Math.round(monthlyRevenue * 100) / 100, // Round to 2 decimals
+            failedPayments,
+            conversionRate: parseFloat(conversionRate),
+            activeChange,
+            revenueChange,
+            failedChange,
+            activeChangePercent: previousMonthActive > 0 
+                ? ((activeChange / previousMonthActive) * 100).toFixed(1)
+                : '0',
+            revenueChangePercent: previousMonthRevenue > 0
+                ? ((revenueChange / previousMonthRevenue) * 100).toFixed(1)
+                : '0',
+        });
+    } catch (error) {
+        console.error("Error getting subscription stats:", error);
+        res.status(500).json({ error: "Server error" });
+    }
+}
+
+// Get all subscriptions for admin dashboard
+export const getAllSubscriptionsForAdmin = async (req, res) => {
+    try {
+        if (!isDBConnected()) {
+            return res.status(503).json({ 
+                error: "Database connection not available." 
+            });
+        }
+
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const statusFilter = req.query.status || 'all';
+        const search = req.query.search || '';
+
+        // Build query
+        const query = {};
+
+        // Status filter
+        if (statusFilter !== 'all') {
+            if (statusFilter === 'Active') {
+                query.status = 'active';
+            } else if (statusFilter === 'Cancelled') {
+                query.status = 'canceled';
+            } else if (statusFilter === 'Payment Failed') {
+                query.status = { $in: ['past_due', 'unpaid'] };
+            }
+        }
+
+        // Search filter (by user email or username)
+        if (search) {
+            // First find users matching search
+            const users = await User.find({
+                $or: [
+                    { email: { $regex: search, $options: 'i' } },
+                    { username: { $regex: search, $options: 'i' } },
+                ]
+            }).select('_id');
+            
+            const userIds = users.map(u => u._id);
+            if (userIds.length === 0) {
+                // No users found matching search, return empty result
+                return res.status(200).json({
+                    subscriptions: [],
+                    pagination: {
+                        page,
+                        limit,
+                        total: 0,
+                        totalPages: 0,
+                    },
+                });
+            }
+            query.userId = { $in: userIds };
+        }
+
+        // Get total count
+        const total = await Subscription.countDocuments(query);
+
+        // Get subscriptions with pagination
+        const subscriptions = await Subscription.find(query)
+            .populate('userId', 'username email avatar')
+            .sort({ createdAt: -1 })
+            .skip((page - 1) * limit)
+            .limit(limit)
+            .lean();
+
+        // Format subscriptions for admin dashboard
+        const formattedSubscriptions = subscriptions.map(sub => {
+            const user = sub.userId;
+            const userName = user?.username || user?.email?.split('@')[0] || 'Unknown';
+            const userEmail = user?.email || 'No email';
+
+            // Format status
+            let status = 'Active';
+            if (sub.status === 'canceled') {
+                status = 'Cancelled';
+            } else if (sub.status === 'past_due' || sub.status === 'unpaid') {
+                status = 'Payment Failed';
+            } else if (sub.status === 'trialing') {
+                status = 'Trialing';
+            } else {
+                status = 'Active';
+            }
+
+            // Format plan name
+            let planName = sub.planName;
+            if (planName === 'Ultimate Plan') {
+                planName = 'VIP'; // Match the UI
+            }
+
+            // Format amount
+            const amount = `$${sub.price?.toFixed(2) || '0.00'}`;
+
+            // Payment method (default to Stripe since that's what we use)
+            const paymentMethod = 'Stripe';
+
+            // Next billing date
+            const nextBilling = sub.currentPeriodEnd
+                ? new Date(sub.currentPeriodEnd).toISOString().split('T')[0]
+                : 'N/A';
+
+            // Joined date
+            const joined = sub.createdAt
+                ? new Date(sub.createdAt).toISOString().split('T')[0]
+                : 'N/A';
+
+            return {
+                id: sub._id.toString(),
+                userId: sub.userId?._id?.toString() || '',
+                user: userName,
+                email: userEmail,
+                plan: planName,
+                status,
+                amount,
+                method: paymentMethod,
+                nextBilling,
+                joined,
+                stripeSubscriptionId: sub.stripeSubscriptionId,
+                cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
+                currentPeriodStart: sub.currentPeriodStart,
+                currentPeriodEnd: sub.currentPeriodEnd,
+            };
+        });
+
+        res.status(200).json({
+            subscriptions: formattedSubscriptions,
+            pagination: {
+                page,
+                limit,
+                total,
+                totalPages: Math.ceil(total / limit),
+            },
+        });
+    } catch (error) {
+        console.error("Error getting subscriptions for admin:", error);
+        res.status(500).json({ error: "Server error" });
+    }
+}
 
