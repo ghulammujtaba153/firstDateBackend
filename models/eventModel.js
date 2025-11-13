@@ -18,11 +18,25 @@ const eventSchema = new mongoose.Schema({
     type: {
         type: String,   
     },
-    startDate: {
-        type: Date
+    date: {
+        type: Date,
+        required: true
     },
-    endDate: {
-        type: Date
+    time: {
+        type: String,
+        required: true
+    },
+    duration: {
+        type: Number,
+        required: true
+    },
+    maxSlots: {
+        type: Number,
+        required: true
+    },
+    price: {
+        type: Number,
+        required: true
     },
     participants: [{
         type: mongoose.Schema.Types.ObjectId,
@@ -30,8 +44,8 @@ const eventSchema = new mongoose.Schema({
     }],
     status: {
         type: String,
-        enum: ['upcoming', 'ongoing', 'completed'],
-        default: 'upcoming'
+        enum: ['open', 'closed', "completed"],
+        default: 'open'
     },
 }, { timestamps: true });
 

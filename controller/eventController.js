@@ -86,7 +86,30 @@ export const deleteEvent = async (req, res) => {
 export const getUpcomingEvents = async (req, res) => {
   try {
     const now = new Date();
-    const events = await Event.find({ startDate: { $gt: now } }).populate('participants');
+    // Get events that are in the future (by startDate or date)
+    // Exclude completed events
+    const events = await Event.find({
+      $and: [
+        {
+          $or: [
+            { 
+              $and: [
+                { startDate: { $exists: true } },
+                { startDate: { $gt: now } }
+              ]
+            },
+            { 
+              $and: [
+                { date: { $exists: true } },
+                { date: { $gt: now } },
+                { startDate: { $exists: false } } // Only use date if startDate doesn't exist
+              ]
+            }
+          ]
+        },
+        { status: { $ne: 'completed' } }
+      ]
+    }).populate('participants');
     res.status(200).json(events);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -98,8 +121,22 @@ export const getOngoingEvents = async (req, res) => {
   try {
     const now = new Date();
     const events = await Event.find({
-      startDate: { $lte: now },
-      endDate: { $gte: now }
+      $or: [
+        {
+          startDate: { $lte: now },
+          endDate: { $gte: now }
+        },
+        {
+          date: { $lte: now },
+          $expr: {
+            $gte: [
+              { $add: ['$date', { $multiply: ['$duration', 60000] }] },
+              now
+            ]
+          }
+        }
+      ],
+      status: { $ne: 'completed' }
     }).populate('participants');
     res.status(200).json(events);
   } catch (error) {
@@ -111,7 +148,45 @@ export const getOngoingEvents = async (req, res) => {
 export const getCompletedEvents = async (req, res) => {
   try {
     const now = new Date();
-    const events = await Event.find({ endDate: { $lt: now } }).populate('participants');
+    // Only return events that are actually completed
+    // Must have status 'completed' OR be past their end date
+    // Exclude events with future startDate
+    const events = await Event.find({
+      $and: [
+        {
+          $or: [
+            { status: 'completed' },
+            {
+              $and: [
+                { endDate: { $exists: true } },
+                { endDate: { $lt: now } }
+              ]
+            },
+            {
+              $and: [
+                { date: { $exists: true } },
+                { startDate: { $exists: false } }, // Only use date if startDate doesn't exist
+                { 
+                  $expr: {
+                    $lt: [
+                      { $add: ['$date', { $multiply: ['$duration', 60000] }] },
+                      now
+                    ]
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          // Exclude events with future startDate (they should be in upcoming)
+          $or: [
+            { startDate: { $exists: false } },
+            { startDate: { $lte: now } }
+          ]
+        }
+      ]
+    }).populate('participants');
     res.status(200).json(events);
   } catch (error) {
     res.status(400).json({ error: error.message });
@@ -140,6 +215,13 @@ export const joinEvent = async (req, res) => {
     }
 
     const event = await Event.findById(eventId);
+
+    if (event.status === 'closed') {
+      return res.status(400).json({ message: "Event is closed" });
+    }
+    if (event.participants.length >= event.maxSlots) {
+      return res.status(400).json({ message: "Event is full" });
+    }
     if (!event) return res.status(404).json({ message: "Event not found" });
 
     if (event.participants.includes(userId)) {
@@ -162,6 +244,12 @@ export const leaveEvent = async (req, res) => {
     const { userId } = req.body;
 
     const event = await Event.findById(eventId);
+    if (event.status === 'closed') {
+      return res.status(400).json({ message: "Event is closed" });
+    }
+    if (event.participants.length === 0) {
+      return res.status(400).json({ message: "Event has no participants" });
+    }
     if (!event) return res.status(404).json({ message: "Event not found" });
 
     event.participants = event.participants.filter(
