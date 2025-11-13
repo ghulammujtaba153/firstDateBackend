@@ -13,6 +13,7 @@ import likeRouter from './likeRoutes.js';
 import uploadRouter from './uploadRoutes.js';
 import diditRouter from './diditRoutes.js';
 import paymentRouter from './paymentRoutes.js';
+import appSubscriptionRouter from './appSubscriptionRoutes.js';
 
 const router = express.Router();
 
@@ -30,6 +31,7 @@ router.use("/chat", chatRoomRouter)
 router.use("/likes", likeRouter)
 router.use("/upload", uploadRouter)
 router.use("/payments", paymentRouter)
+router.use("/app-subscriptions", appSubscriptionRouter)
 router.use("/", diditRouter)
 
 export default router;

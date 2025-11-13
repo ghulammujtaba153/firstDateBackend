@@ -84,9 +84,20 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  isPremium: {
+    type: Boolean,
+    default: false,
+  },
+  premiumUntil: {
+    type: Date,
+    default: null,
+  },
   googleId: {
     type: String,
     unique: true,
+  },
+  stripeCustomerId: {
+    type: String,
   },
   onboardingComlete: {
     type: Boolean,

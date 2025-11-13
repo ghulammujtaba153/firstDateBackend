@@ -51,8 +51,6 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 const APP_ID = process.env.AGORA_APP_ID;
 const APP_CERTIFICATE = process.env.AGORA_APP_CERTIFICATE;
 
-connectDB();
-
 app.use(passport.initialize());
 
 
@@ -183,8 +181,22 @@ app.post("/generate-token", (req, res) => {
 });
 
 
-// Use httpServer instead of app.listen for Socket.io
-httpServer.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📡 Socket.io server initialized`);
-});
+// Connect to database and start server
+const startServer = async () => {
+  try {
+    // Connect to database first
+    await connectDB();
+    console.log('✅ Database connection established');
+    
+    // Start server after database is connected
+    httpServer.listen(PORT, () => {
+      console.log(`🚀 Server running on http://localhost:${PORT}`);
+      console.log(`📡 Socket.io server initialized`);
+    });
+  } catch (error) {
+    console.error('❌ Failed to start server:', error);
+    process.exit(1);
+  }
+};
+
+startServer();

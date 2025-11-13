@@ -1,26 +1,60 @@
-import mongoose from "mongoose"
-
+import mongoose from "mongoose";
 
 const subscriptionSchema = new mongoose.Schema({
-    title: { 
-        type: String, 
-        required: true 
-    },
-    features: {
-        type: [String],
-        required: true
-    },
-    price: { 
-        type: Number, 
-        required: true 
-    },
-    duration: { 
-        type: String, 
-        required: true 
-    } // e.g. "monthly", "yearly"
-})
+  userId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: true,
+  },
+  planId: {
+    type: String,
+    required: true, // 'basic', 'premium', 'ultimate'
+  },
+  planName: {
+    type: String,
+    required: true,
+  },
+  price: {
+    type: Number,
+    required: true,
+  },
+  stripeSubscriptionId: {
+    type: String,
+    unique: true,
+    sparse: true,
+  },
+  stripeCustomerId: {
+    type: String,
+  },
+  stripePriceId: {
+    type: String,
+  },
+  status: {
+    type: String,
+    enum: ['active', 'canceled', 'past_due', 'unpaid', 'trialing'],
+    default: 'active',
+  },
+  currentPeriodStart: {
+    type: Date,
+  },
+  currentPeriodEnd: {
+    type: Date,
+  },
+  cancelAtPeriodEnd: {
+    type: Boolean,
+    default: false,
+  },
+  metadata: {
+    type: Map,
+    of: String,
+  },
+}, { timestamps: true });
 
+// Index for faster queries
+subscriptionSchema.index({ userId: 1 });
+subscriptionSchema.index({ stripeSubscriptionId: 1 });
+subscriptionSchema.index({ status: 1 });
 
 const Subscription = mongoose.model("Subscription", subscriptionSchema);
 
-export default Subscription
+export default Subscription;
