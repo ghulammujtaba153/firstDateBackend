@@ -1,6 +1,8 @@
 import User from "../models/user.js"
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
+import { emailApi } from "../utils/mailer.js";
+import SibApiV3Sdk from "sib-api-v3-sdk";
 
 
 export const registerUser = async (req, res) => {
@@ -104,7 +106,161 @@ export const getUser = async (req, res) => {
 }
 
 
-// controllers/authController.js
+export const inviteUser = async (req, res) => {
+  try {
+    const { email, username, phone, role } = req.body;
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ error: "User with this email already exists" });
+    }
+
+    // Generate invitation token
+    const invitationToken = jwt.sign(
+      { email, type: 'invitation' },
+      process.env.JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    // Create user (no password yet - will be set when they accept invitation)
+    const user = await User.create({
+      email,
+      username: username || email.split('@')[0],
+      phone: phone || '',
+      role: role || 'user',
+      status: 'inactive', // User is inactive until they set password
+    });
+
+    // Prepare email content
+    const invitationLink = `${process.env.CLIENT_URL}/signup?token=${invitationToken}`;
+    const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+            .header { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 10px 10px 0 0; }
+            .content { background: #f9f9f9; padding: 30px; border-radius: 0 0 10px 10px; }
+            .button { display: inline-block; padding: 12px 30px; background: #667eea; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
+            .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="header">
+              <h1>You're Invited to First Date!</h1>
+            </div>
+            <div class="content">
+              <p>Hello${username ? ` ${username}` : ''},</p>
+              <p>You have been invited to join First Date, a premium dating platform. Click the button below to complete your registration and set up your account.</p>
+              <div style="text-align: center;">
+                <a href="${invitationLink}" class="button">Accept Invitation</a>
+              </div>
+              <p>Or copy and paste this link into your browser:</p>
+              <p style="word-break: break-all; color: #667eea;">${invitationLink}</p>
+              <p><strong>This invitation link will expire in 7 days.</strong></p>
+              <p>If you didn't expect this invitation, you can safely ignore this email.</p>
+            </div>
+            <div class="footer">
+              <p>&copy; ${new Date().getFullYear()} First Date. All rights reserved.</p>
+            </div>
+          </div>
+        </body>
+      </html>
+    `;
+
+    // Send invitation email using Brevo
+    const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
+    sendSmtpEmail.subject = "Invitation to join First Date";
+    sendSmtpEmail.htmlContent = htmlContent;
+    sendSmtpEmail.sender = { name: "First Date", email: process.env.FROM_EMAIL || "noreply@firstdate.com" };
+    sendSmtpEmail.to = [{ email: user.email, name: username || user.email }];
+
+    await emailApi.sendTransacEmail(sendSmtpEmail);
+
+    // Return user without sensitive data
+    const userResponse = {
+      id: user._id,
+      email: user.email,
+      username: user.username,
+      role: user.role,
+      status: user.status,
+      createdAt: user.createdAt,
+    };
+
+    res.status(201).json({
+      message: "Invitation sent successfully",
+      user: userResponse,
+    });
+  } catch (error) {
+    console.error("Invite user error:", error);
+    if (error.code === 11000) {
+      return res.status(400).json({ error: "User with this email already exists" });
+    }
+    res.status(500).json({ error: "Server error", message: error.message });
+  }
+}
+
+export const resetPasswordofInvitedUser = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { password } = req.body;
+
+    if (!token) {
+      return res.status(400).json({ error: "Invalid or missing token" });
+    }
+
+    if (!password || password.length < 6) {
+      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    }
+
+    // Verify JWT token
+    let decoded;
+    try {
+      decoded = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (err) {
+      return res.status(400).json({ error: "Invalid or expired invitation link" });
+    }
+
+    // Token must be for invitation
+    if (decoded.type !== "invitation") {
+      return res.status(400).json({ error: "Invalid token type" });
+    }
+
+    // Find the invited user
+    const user = await User.findOne({ email: decoded.email });
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    // Check if password already set
+    if (user.password) {
+      return res
+        .status(400)
+        .json({ error: "Password already set. Please login instead." });
+    }
+
+    // Hash new password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
+    // Update user
+    user.password = hashedPassword;
+    user.status = "active"; // activate account
+    await user.save();
+
+    res.status(200).json({
+      message: "Password set successfully. Your account is now active.",
+    });
+  } catch (error) {
+    console.error("Reset password error:", error);
+    res.status(500).json({ error: "Server error", message: error.message });
+  }
+};
+
+
+
 export const getMe = async (req, res) => {
   try {
     

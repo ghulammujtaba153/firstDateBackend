@@ -15,6 +15,7 @@ import diditRouter from './diditRoutes.js';
 import paymentRouter from './paymentRoutes.js';
 import appSubscriptionRouter from './appSubscriptionRoutes.js';
 import supportRouter from './supportRoutes.js';
+import dashboardStatsRouter from './dashboardStatsRoutes.js';
 
 const router = express.Router();
 
@@ -35,6 +36,7 @@ router.use("/payments", paymentRouter)
 router.use("/app-subscriptions", appSubscriptionRouter)
 router.use("/", diditRouter)
 router.use("/support", supportRouter)
+router.use("/dashboard", dashboardStatsRouter)
 
 export default router;
 
