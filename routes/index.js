@@ -34,7 +34,7 @@ router.use("/likes", likeRouter)
 router.use("/upload", uploadRouter)
 router.use("/payments", paymentRouter)
 router.use("/app-subscriptions", appSubscriptionRouter)
-router.use("/", diditRouter)
+router.use("/", diditRouter) // DIDIT routes: /api/workflow/start, /api/workflow/status/:sessionId, /api/verify-face
 router.use("/support", supportRouter)
 router.use("/dashboard", dashboardStatsRouter)
 
