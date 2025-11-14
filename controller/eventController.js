@@ -19,7 +19,7 @@ export const createEvent = async (req, res) => {
         title: "New Event Available",
         message: `${event.title} - ${event.description?.substring(0, 100)}${event.description?.length > 100 ? '...' : ''}`,
         avatar: event.image || null, // If event has an image field
-        link: `/dashboard/events/${event._id}`, // Link to event detail page
+        link: `/dashboard/events`, // Link to event detail page
         type: 'event',
         isRead: false
       }));
