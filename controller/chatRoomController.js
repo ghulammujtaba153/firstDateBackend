@@ -42,7 +42,7 @@ export const getUserChats = async (req, res) => {
       .populate("participants", "username email avatar")
       .sort({ createdAt: -1 });
 
-    // Get last message for each chat
+    // Get last message and unread count for each chat
     const chatsWithLastMessage = await Promise.all(
       chats.map(async (chat) => {
         const lastMessage = await Message.findOne({ chatId: chat._id })
@@ -50,9 +50,17 @@ export const getUserChats = async (req, res) => {
           .sort({ timestamp: -1 })
           .limit(1);
 
+        // Count unread messages (messages not sent by current user and status is not 'read')
+        const unreadCount = await Message.countDocuments({
+          chatId: chat._id,
+          sender: { $ne: userId },
+          status: { $ne: 'read' }
+        });
+
         return {
           ...chat.toObject(),
           lastMessage: lastMessage || null,
+          unreadCount: unreadCount || 0,
         };
       })
     );
@@ -123,27 +131,54 @@ export const sendMessage = async (req, res) => {
 
 /**
  * Update message status (sent, delivered, read)
+ * Supports both single message update and bulk update for a chat
  */
 export const updateMessageStatus = async (req, res) => {
   try {
-    const { id } = req.params;
+    const { chatId, userId } = req.body;
     const { status } = req.body;
 
     if (!["sent", "delivered", "read"].includes(status)) {
       return res.status(400).json({ error: "Invalid message status" });
     }
 
-    const updatedMessage = await Message.findByIdAndUpdate(
-      id,
-      { status },
-      { new: true }
-    );
+    // If chatId and userId are provided, mark all unread messages in that chat as read
+    if (chatId && userId && status === "read") {
+      const result = await Message.updateMany(
+        {
+          chatId: chatId,
+          sender: { $ne: userId }, // Messages not sent by the current user
+          status: { $ne: "read" } // Only update messages that are not already read
+        },
+        {
+          $set: { status: "read" }
+        }
+      );
 
-    if (!updatedMessage) {
-      return res.status(404).json({ error: "Message not found" });
+      return res.status(200).json({
+        success: true,
+        updatedCount: result.modifiedCount,
+        message: `Marked ${result.modifiedCount} messages as read`
+      });
     }
 
-    res.status(200).json(updatedMessage);
+    // Single message update (backward compatibility)
+    const { id } = req.body;
+    if (id) {
+      const updatedMessage = await Message.findByIdAndUpdate(
+        id,
+        { status },
+        { new: true }
+      );
+
+      if (!updatedMessage) {
+        return res.status(404).json({ error: "Message not found" });
+      }
+
+      return res.status(200).json(updatedMessage);
+    }
+
+    return res.status(400).json({ error: "Either chatId+userId or id is required" });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

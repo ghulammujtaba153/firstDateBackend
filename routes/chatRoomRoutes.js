@@ -17,7 +17,7 @@ chatRoomRouter.get("/user/:userId", getUserChats);
 // Messages
 chatRoomRouter.get("/:chatId/messages", getChatMessages);
 chatRoomRouter.post("/message", sendMessage);
-chatRoomRouter.patch("/message/:id/status", updateMessageStatus);
+chatRoomRouter.post("/message/update-status", updateMessageStatus);
 chatRoomRouter.delete("/message/:id", deleteMessage);
 
 export default chatRoomRouter;
