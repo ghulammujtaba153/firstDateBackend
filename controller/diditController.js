@@ -182,6 +182,58 @@ export const getWorkflowStatus = async (req, res) => {
  * DIDIT Webhook Callback Handler
  * This endpoint receives webhook notifications from DIDIT when verification status changes
  */
+// export const diditWebhookCallback = async (req, res) => {
+//   try {
+//     const { session_id, status, vendor_data, result } = req.body;
+
+//     console.log("📥 DIDIT Webhook received:", {
+//       session_id,
+//       status,
+//       vendor_data,
+//       result,
+//     });
+
+//     // Verify webhook (optional: verify signature if DIDIT provides one)
+//     // const signature = req.headers['x-didit-signature'];
+//     // if (!verifyWebhookSignature(req.body, signature)) {
+//     //   return res.status(401).json({ message: "Invalid signature" });
+//     // }
+
+//     // Update user verification status based on vendor_data (user ID)
+//     if (vendor_data && vendor_data !== "user_verification") {
+//       try {
+//         const user = await User.findById(vendor_data);
+        
+//         if (user) {
+//           // Check if verification was successful
+//           const isVerified = status === "completed" || status === "success" || 
+//                            (result?.face_match?.match === true) ||
+//                            (result?.verification?.status === "verified");
+
+//           if (isVerified) {
+//             user.verified = true;
+//             await user.save();
+//             console.log(`✅ User ${vendor_data} verified successfully`);
+//           } else {
+//             console.log(`❌ User ${vendor_data} verification failed:`, status, result);
+//           }
+//         }
+//       } catch (userError) {
+//         console.error("Error updating user verification status:", userError);
+//       }
+//     }
+
+//     // Return 200 to acknowledge receipt
+//     res.status(200).json({ message: "Webhook received successfully" });
+//   } catch (error) {
+//     console.error("DIDIT webhook error:", error);
+//     res.status(500).json({
+//       message: "Failed to process webhook",
+//       error: error.message,
+//     });
+//   }
+// };
+
 export const diditWebhookCallback = async (req, res) => {
   try {
     const { session_id, status, vendor_data, result } = req.body;
@@ -193,38 +245,42 @@ export const diditWebhookCallback = async (req, res) => {
       result,
     });
 
-    // Verify webhook (optional: verify signature if DIDIT provides one)
-    // const signature = req.headers['x-didit-signature'];
-    // if (!verifyWebhookSignature(req.body, signature)) {
-    //   return res.status(401).json({ message: "Invalid signature" });
-    // }
+    // STEP 1: Ignore non-final statuses
+    const isFinal =
+      status === "completed" ||
+      status === "success" ||
+      status === "failed" ||
+      result !== undefined;
 
-    // Update user verification status based on vendor_data (user ID)
+    if (!isFinal) {
+      console.log(`⏳ Verification pending: ${status}`);
+      return res.status(200).json({ message: "Pending update acknowledged" });
+    }
+
+    // STEP 2: Final verification result
+    const isVerified =
+      status === "completed" ||
+      status === "success" ||
+      (result?.face_match?.match === true) ||
+      (result?.verification?.status === "verified");
+
+    // STEP 3: Update user if ID provided
     if (vendor_data && vendor_data !== "user_verification") {
-      try {
-        const user = await User.findById(vendor_data);
-        
-        if (user) {
-          // Check if verification was successful
-          const isVerified = status === "completed" || status === "success" || 
-                           (result?.face_match?.match === true) ||
-                           (result?.verification?.status === "verified");
+      const user = await User.findById(vendor_data);
 
-          if (isVerified) {
-            user.verified = true;
-            await user.save();
-            console.log(`✅ User ${vendor_data} verified successfully`);
-          } else {
-            console.log(`❌ User ${vendor_data} verification failed:`, status, result);
-          }
-        }
-      } catch (userError) {
-        console.error("Error updating user verification status:", userError);
+      if (user) {
+        user.verified = isVerified;
+        await user.save();
+
+        console.log(
+          isVerified
+            ? `✅ User ${vendor_data} verified successfully`
+            : `❌ User ${vendor_data} final verification failed`
+        );
       }
     }
 
-    // Return 200 to acknowledge receipt
-    res.status(200).json({ message: "Webhook received successfully" });
+    res.status(200).json({ message: "Webhook processed" });
   } catch (error) {
     console.error("DIDIT webhook error:", error);
     res.status(500).json({
