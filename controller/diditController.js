@@ -179,6 +179,141 @@ export const getWorkflowStatus = async (req, res) => {
 };
 
 /**
+ * DIDIT Browser Callback Handler (GET)
+ * This endpoint handles browser redirects from DIDIT after verification
+ * Updates user verification status and redirects to frontend
+ */
+export const diditBrowserCallback = async (req, res) => {
+  try {
+    const { verificationSessionId, sessionId, status } = req.query;
+    const sessionIdToCheck = verificationSessionId || sessionId;
+
+    if (!sessionIdToCheck) {
+      return res.status(400).send(`
+        <html>
+          <body>
+            <h1>Verification Error</h1>
+            <p>Missing session ID. Please try again.</p>
+            <script>
+              setTimeout(() => window.location.href = '${process.env.CLIENT_URL || "http://localhost:3000"}/dashboard/profile', 3000);
+            </script>
+          </body>
+        </html>
+      `);
+    }
+
+    const API_KEY = process.env.DIDIT_API_KEY;
+    if (!API_KEY) {
+      return res.status(500).send(`
+        <html>
+          <body>
+            <h1>Server Error</h1>
+            <p>Server configuration error. Please contact support.</p>
+            <script>
+              setTimeout(() => window.location.href = '${process.env.CLIENT_URL || "http://localhost:3000"}/dashboard/profile', 3000);
+            </script>
+          </body>
+        </html>
+      `);
+    }
+
+    // Get workflow status from DIDIT
+    // Try both possible endpoints
+    let statusResponse;
+    let statusData;
+    
+    try {
+      // First try: /v2/workflows/{sessionId}/status
+      statusResponse = await fetch(
+        `https://verification.didit.me/v2/workflows/${sessionIdToCheck}/status`,
+        {
+          method: "GET",
+          headers: {
+            accept: "application/json",
+            "x-api-key": API_KEY,
+          },
+        }
+      );
+      
+      if (statusResponse.ok) {
+        statusData = await statusResponse.json();
+      } else {
+        // Fallback: Try /v2/session/{sessionId}/status
+        console.log("Trying fallback endpoint /v2/session/{sessionId}/status");
+        statusResponse = await fetch(
+          `https://verification.didit.me/v2/session/${sessionIdToCheck}/status`,
+          {
+            method: "GET",
+            headers: {
+              accept: "application/json",
+              "x-api-key": API_KEY,
+            },
+          }
+        );
+        
+        if (statusResponse.ok) {
+          statusData = await statusResponse.json();
+        } else {
+          const errorText = await statusResponse.text();
+          console.error("Failed to get workflow status:", errorText);
+          return res.redirect(
+            `${process.env.CLIENT_URL || "http://localhost:3000"}/dashboard/profile?verification=error`
+          );
+        }
+      }
+    } catch (fetchError) {
+      console.error("Error fetching workflow status:", fetchError);
+      return res.redirect(
+        `${process.env.CLIENT_URL || "http://localhost:3000"}/dashboard/profile?verification=error`
+      );
+    }
+    console.log("📥 DIDIT Browser Callback - Status:", statusData);
+
+    // Determine if verification was successful
+    const statusLower = status?.toLowerCase();
+    const isVerified =
+      statusLower === "approved" ||
+      statusData.status === "completed" ||
+      statusData.status === "success" ||
+      statusData.status === "approved" ||
+      statusData.result?.face_match?.match === true ||
+      statusData.result?.verification?.status === "verified";
+
+    // Extract vendor_data (user ID) from workflow data
+    const userId = statusData.vendor_data || statusData.metadata?.user_id;
+
+    if (userId && userId !== "user_verification") {
+      try {
+        const user = await User.findById(userId);
+        if (user) {
+          user.verified = isVerified;
+          await user.save();
+          console.log(
+            isVerified
+              ? `✅ User ${userId} verified successfully via browser callback`
+              : `❌ User ${userId} verification failed via browser callback`
+          );
+        }
+      } catch (userError) {
+        console.error("Error updating user verification status:", userError);
+      }
+    }
+
+    // Redirect to frontend with status
+    const redirectUrl = isVerified
+      ? `${process.env.CLIENT_URL || "http://localhost:3000"}/dashboard/profile?verification=success`
+      : `${process.env.CLIENT_URL || "http://localhost:3000"}/dashboard/profile?verification=failed`;
+
+    return res.redirect(redirectUrl);
+  } catch (error) {
+    console.error("DIDIT browser callback error:", error);
+    return res.redirect(
+      `${process.env.CLIENT_URL || "http://localhost:3000"}/dashboard/profile?verification=error`
+    );
+  }
+};
+
+/**
  * DIDIT Webhook Callback Handler
  * This endpoint receives webhook notifications from DIDIT when verification status changes
  */
@@ -246,7 +381,9 @@ export const diditWebhookCallback = async (req, res) => {
     });
 
     // STEP 1: Ignore non-final statuses
+    const statusLower = status?.toLowerCase();
     const isFinal =
+      statusLower === "approved" ||
       status === "completed" ||
       status === "success" ||
       status === "failed" ||
@@ -259,6 +396,7 @@ export const diditWebhookCallback = async (req, res) => {
 
     // STEP 2: Final verification result
     const isVerified =
+      statusLower === "approved" ||
       status === "completed" ||
       status === "success" ||
       (result?.face_match?.match === true) ||

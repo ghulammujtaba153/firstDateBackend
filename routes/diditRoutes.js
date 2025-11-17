@@ -5,7 +5,8 @@ import {
   startDiditWorkflow, 
   uploadWorkflowFields,
   getWorkflowStatus,
-  diditWebhookCallback
+  diditWebhookCallback,
+  diditBrowserCallback
 } from "../controller/diditController.js";
 
 const diditRouter = express.Router();
@@ -14,7 +15,10 @@ const diditRouter = express.Router();
 diditRouter.post("/workflow/start", startDiditWorkflow);
 diditRouter.get("/workflow/status/:sessionId", getWorkflowStatus);
 
-// DIDIT Webhook callback - receives verification status updates
+// DIDIT Browser callback (GET) - handles browser redirects after verification
+diditRouter.get("/callback", diditBrowserCallback);
+
+// DIDIT Webhook callback (POST) - receives verification status updates
 diditRouter.post("/callback", express.json(), diditWebhookCallback);
 
 // Legacy face verification endpoint (for backward compatibility - uses file upload)
