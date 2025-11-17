@@ -7,6 +7,24 @@ const chatSchema = new mongoose.Schema({
       ref: "User",
     },
   ],
+  type: {
+    type: String,
+    enum: ['private', 'event'],
+    default: 'private',
+  },
+  eventId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Event",
+  },
+  status: {
+    type: String,
+    enum: ['active', 'inactive'],
+    default: 'active',
+  },
+  expiresAt: {
+    type: Date,
+    default: null,
+  },
   createdAt: { type: Date, default: Date.now },
 });
 

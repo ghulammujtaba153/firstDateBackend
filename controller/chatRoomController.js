@@ -7,26 +7,55 @@ import Message from "../models/messageModel.js";
  */
 export const createOrGetChat = async (req, res) => {
   try {
-    const { participants } = req.body;
+    const { participants, type, eventId } = req.body;
 
     if (!participants || participants.length < 2) {
       return res.status(400).json({ error: "At least two participants are required" });
     }
 
-    // Check if chat already exists between same participants
+    const chatData = {
+      participants,
+      type: type || "private",
+    };
+
+    // Optional event type
+    if (type === "event") {
+      chatData.eventId = eventId;
+      chatData.expiresAt = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+    }
+
+    // Check if chat exists
     const existingChat = await Chat.findOne({
       participants: { $all: participants, $size: participants.length },
+      type,             // type must match
+      eventId: eventId || null, // event must match too
     }).populate("participants", "username email avatar");
 
     if (existingChat) {
       return res.status(200).json(existingChat);
     }
 
-    // Create new chat
-    const newChat = await Chat.create({ participants });
+    // Create new chat with correct data
+    const newChat = await Chat.create(chatData);
     const populatedChat = await newChat.populate("participants", "username email avatar");
 
     res.status(201).json(populatedChat);
+
+  } catch (error) {
+    console.error("Chat creation error:", error);
+    res.status(500).json({ error: error.message });
+  }
+};
+
+
+export const updateChatStatus = async (req, res) => {
+  try {
+    const { chatId, status } = req.body;
+    const chat = await Chat.findByIdAndUpdate(chatId, { status }, { new: true });
+    if (!chat) {
+      return res.status(404).json({ error: "Chat not found" });
+    }
+    res.status(200).json(chat);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -38,7 +67,7 @@ export const createOrGetChat = async (req, res) => {
 export const getUserChats = async (req, res) => {
   try {
     const { userId } = req.params;
-    const chats = await Chat.find({ participants: userId })
+    const chats = await Chat.find({ participants: userId, type: 'private' })
       .populate("participants", "username email avatar")
       .sort({ createdAt: -1 });
 
@@ -76,6 +105,51 @@ export const getUserChats = async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
+};
+
+
+export const getEventChats = async (req, res) => {
+    try {
+      const { userId } = req.params;
+      const chats = await Chat.find({ participants: userId, type: 'event' })
+        .populate("participants", "username email avatar")
+        .sort({ createdAt: -1 });
+  
+      // Get last message and unread count for each chat
+      const chatsWithLastMessage = await Promise.all(
+        chats.map(async (chat) => {
+          const lastMessage = await Message.findOne({ chatId: chat._id })
+            .populate("sender", "username email avatar")
+            .sort({ timestamp: -1 })
+            .limit(1);
+  
+          // Count unread messages (messages not sent by current user and status is not 'read')
+          const unreadCount = await Message.countDocuments({
+            chatId: chat._id,
+            sender: { $ne: userId },
+            status: { $ne: 'read' }
+          });
+  
+          return {
+            ...chat.toObject(),
+            lastMessage: lastMessage || null,
+            unreadCount: unreadCount || 0,
+          };
+        })
+      );
+  
+      // Sort by last message timestamp (most recent first)
+      chatsWithLastMessage.sort((a, b) => {
+        const aTime = a.lastMessage?.timestamp || a.createdAt || 0;
+        const bTime = b.lastMessage?.timestamp || b.createdAt || 0;
+        return new Date(bTime) - new Date(aTime);
+      });
+  
+      res.status(200).json(chatsWithLastMessage);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
+    }
+  
 };
 
 /**
