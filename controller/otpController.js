@@ -59,9 +59,48 @@ export const sendOtp = async (req, res) => {
       subject: "Your OTP Code",
       sender,
       to: [{ email, name: user?.name || undefined }],
-      htmlContent: `<h2>OTP Verification</h2>
-                    <p>Your OTP code is: <b>${otpCode}</b></p>
-                    <p>This code will expire in <b>5 minutes</b>.</p>`,
+      htmlContent: `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>OTP Verification</title>
+</head>
+<body style="margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background-color: #f4f4f4;">
+  <table role="presentation" style="width: 100%; border-collapse: collapse; background-color: #f4f4f4; padding: 20px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" style="max-width: 600px; width: 100%; background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); overflow: hidden;">
+          <tr>
+            <td style="padding: 40px 30px; text-align: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+              <h1 style="margin: 0; color: #ffffff; font-size: 28px; font-weight: 600;">OTP Verification</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 40px 30px;">
+              <p style="margin: 0 0 20px 0; color: #333333; font-size: 16px; line-height: 1.6;">Hello${user?.name ? ` ${user.name}` : ''},</p>
+              <p style="margin: 0 0 30px 0; color: #666666; font-size: 15px; line-height: 1.6;">Please use the following verification code to complete your request:</p>
+              <div style="text-align: center; margin: 30px 0;">
+                <div style="display: inline-block; background-color: #f8f9fa; border: 2px dashed #667eea; border-radius: 8px; padding: 20px 40px;">
+                  <p style="margin: 0; font-size: 36px; font-weight: 700; color: #667eea; letter-spacing: 8px; font-family: 'Courier New', monospace;">${otpCode}</p>
+                </div>
+              </div>
+              <p style="margin: 30px 0 0 0; color: #999999; font-size: 13px; line-height: 1.6; text-align: center;">This code will expire in <strong style="color: #e74c3c;">5 minutes</strong>.</p>
+              <p style="margin: 20px 0 0 0; color: #999999; font-size: 12px; line-height: 1.6; text-align: center;">If you didn't request this code, please ignore this email.</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 20px 30px; background-color: #f8f9fa; text-align: center; border-top: 1px solid #e9ecef;">
+              <p style="margin: 0; color: #999999; font-size: 12px;">© ${new Date().getFullYear()} ${process.env.BREVO_SENDER_NAME || 'Your App'}. All rights reserved.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
       textContent: `Your OTP code is ${otpCode}. It will expire in 5 minutes.`,
     };
 
