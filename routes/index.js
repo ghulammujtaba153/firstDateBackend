@@ -17,6 +17,7 @@ import appSubscriptionRouter from './appSubscriptionRoutes.js';
 import supportRouter from './supportRoutes.js';
 import dashboardStatsRouter from './dashboardStatsRoutes.js';
 import matchRequestRouter from './matchRequestRoutes.js';
+import CoupleMatchRouter from './coupleMatchRoutes.js';
 
 const router = express.Router();
 
@@ -39,6 +40,7 @@ router.use("/", diditRouter) // DIDIT routes: /api/workflow/start, /api/workflow
 router.use("/support", supportRouter)
 router.use("/dashboard", dashboardStatsRouter)
 router.use("/match-requests", matchRequestRouter)
+router.use("/couple", CoupleMatchRouter)
 
 export default router;
 

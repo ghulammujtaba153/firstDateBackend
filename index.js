@@ -11,6 +11,8 @@ import { fileURLToPath } from "url";
 import { createServer } from "http";
 import { Server } from "socket.io";
 import { initializeSocket } from "./socket/socketHandler.js";
+import http from "http";
+import { initMatchScheduler } from "./schedulers/matchScheduler.js";
 
 // Get __dirname equivalent in ES modules
 const __filename = fileURLToPath(import.meta.url);
@@ -33,6 +35,12 @@ const io = new Server(httpServer, {
 
 // Initialize Socket.io handlers
 initializeSocket(io);
+
+// expose io on app for controllers that use req.app.get("io")
+app.set("io", io);
+
+// Initialize scheduler with io so it can emit events
+initMatchScheduler(io);
 
 // Make io available globally for use in routes/controllers
 app.set('io', io);

@@ -51,6 +51,9 @@ const userSchema = new mongoose.Schema({
       trim: true,
     },
   },
+  optIn: {
+    type: Boolean,
+  },
   hobbies: {
     type: [String],
   },
