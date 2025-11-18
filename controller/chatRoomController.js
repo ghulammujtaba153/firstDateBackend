@@ -60,6 +60,10 @@ export const updateChatStatus = async (req, res) => {
       data.blockedBy= userId
     }
 
+    if(status == 'active'){
+      data.blockedBy= null
+    }
+
     const chat = await Chat.findByIdAndUpdate(chatId, { $set: data }, { new: true }).populate("participants", "_id");
     if (!chat) {
       return res.status(404).json({ error: "Chat not found" });
