@@ -132,6 +132,26 @@ export const initializeSocket = (io) => {
       }
     });
 
+    // Handle chat status update
+    socket.on('chat:status-update', (data) => {
+      const { chatId, status, toUserId } = data;
+      if (chatId && status && toUserId) {
+        // Notify the other participant about chat status change
+        io.to(`user:${toUserId}`).emit('chat:status-updated', {
+          chatId,
+          status,
+          fromUserId: userSockets.get(socket.id)
+        });
+        // Also broadcast to the chat room
+        io.to(`chat:${chatId}`).emit('chat:status-updated', {
+          chatId,
+          status,
+          fromUserId: userSockets.get(socket.id)
+        });
+        console.log(`Chat status update (${status}) sent for chat ${chatId}`);
+      }
+    });
+
     // Handle disconnect
     socket.on('disconnect', () => {
       const userId = userSockets.get(socket.id);

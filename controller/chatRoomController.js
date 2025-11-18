@@ -50,12 +50,44 @@ export const createOrGetChat = async (req, res) => {
 
 export const updateChatStatus = async (req, res) => {
   try {
-    const { chatId, status } = req.body;
-    const chat = await Chat.findByIdAndUpdate(chatId, { status }, { new: true });
+    const { chatId, userId, status } = req.body;
+
+    const data = {
+      status,
+    };
+
+    if(status === 'inactive'){
+      data.blockedBy= userId
+    }
+
+    const chat = await Chat.findByIdAndUpdate(chatId, { $set: data }, { new: true }).populate("participants", "_id");
     if (!chat) {
       return res.status(404).json({ error: "Chat not found" });
     }
-    res.status(200).json(chat);
+
+
+    
+
+    // Emit socket event to notify all participants about chat status update
+    const io = req.app.get('io');
+    if (io && chat.participants) {
+      chat.participants.forEach((participant) => {
+        io.to(`user:${participant._id}`).emit('chat:status-updated', {
+          chatId,
+          blockedBy: userId,
+          status,
+        });
+      });
+      // Also broadcast to the chat room
+      io.to(`chat:${chatId}`).emit('chat:status-updated', {
+        chatId,
+        blockedBy: userId,
+        status,
+      });
+      console.log(`Chat status update (${status}) broadcasted for chat ${chatId}`);
+    }
+
+    res.status(200).json({ status: chat.status, chat });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
