@@ -104,14 +104,14 @@ export const getUserChats = async (req, res) => {
   try {
     const { userId } = req.params;
     const chats = await Chat.find({ participants: userId, type: 'private' })
-      .populate("participants", "username email avatar")
+      .populate("participants", "username email avatar images")
       .sort({ createdAt: -1 });
 
     // Get last message and unread count for each chat
     const chatsWithLastMessage = await Promise.all(
       chats.map(async (chat) => {
         const lastMessage = await Message.findOne({ chatId: chat._id })
-          .populate("sender", "username email avatar")
+          .populate("sender", "username email avatar, images")
           .sort({ timestamp: -1 })
           .limit(1);
 
