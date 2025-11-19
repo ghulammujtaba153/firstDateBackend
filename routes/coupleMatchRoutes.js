@@ -5,7 +5,8 @@ import {
   getAllMatches,
   getMatchById,
   updateMatch,
-  getMatchesByUser
+  getMatchesByUser,
+  matchStats
 } from '../controller/coupleMatchController.js';
 
 const CoupleMatchRouter = express.Router();
@@ -18,5 +19,7 @@ CoupleMatchRouter.delete('/match/:id', deleteMatch);
 
 // New: get matches for a user
 CoupleMatchRouter.get('/user/:userId', getMatchesByUser);
+
+CoupleMatchRouter.get('/stats', matchStats)
 
 export default CoupleMatchRouter;

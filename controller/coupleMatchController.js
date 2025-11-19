@@ -65,3 +65,48 @@ export const getMatchesByUser = async (req, res) => {
     return res.status(500).json({ message: "Server Error", error: error.message });
   }
 };
+
+
+
+export const matchStats = async (req, res) => {
+    try {
+        // total couple match documents
+        const totalMatches = await CoupleMatch.countDocuments();
+
+        // counts by status
+        const matchedMatchesCount = await CoupleMatch.countDocuments({ status: 'matched' });
+        const pendingMatchesCount = await CoupleMatch.countDocuments({ status: 'pending' });
+
+        // total opt-in users
+        const totalOptInUsers = await User.countDocuments({ optIn: true });
+
+        // get all matches and populate users
+        const allMatches = await CoupleMatch.find()
+            .populate("couple", "_id username email images verified")
+            .lean();
+
+        // Format response exactly like your required structure
+        const matchedUsers = allMatches.map(m => ({
+            _id: m._id,
+            couple: m.couple.map(u => ({
+                _id: u._id,
+                username: u.username,
+                images: u.images || [],
+                verified: !!u.verified
+            })),
+            status: m.status
+        }));
+
+        return res.status(200).json({
+            totalMatches,
+            matchedMatchesCount,
+            pendingMatchesCount,
+            totalOptInUsers,
+            matchedUsers
+        });
+
+    } catch (error) {
+        console.error("matchStats error:", error);
+        return res.status(500).json({ message: "Server Error", error: error.message });
+    }
+};
