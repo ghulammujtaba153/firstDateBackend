@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 
 
+
 const coupleMatchSchema = new mongoose.Schema({
     couple: [
         {
@@ -10,9 +11,10 @@ const coupleMatchSchema = new mongoose.Schema({
     ],
     status: {
         type: String,
-        enum: ["pending", "matched", "unmatched"],
+        enum: ["pending", "matched", "unmatched", "old"],
         default: "pending"
     },
+    
 });
 
 
