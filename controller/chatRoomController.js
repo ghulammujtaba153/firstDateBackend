@@ -1,5 +1,6 @@
 import Chat from "../models/chatModel.js";
 import Message from "../models/messageModel.js";
+import Notification from "../models/notificationModel.js";
 
 /**
  * Create or Get Chat Room between two users
@@ -65,9 +66,23 @@ export const updateChatStatus = async (req, res) => {
       data.blockedBy = null
     }
 
-    const chat = await Chat.findByIdAndUpdate(chatId, { $set: data }, { new: true }).populate("participants", "_id");
+    const chat = await Chat.findByIdAndUpdate(chatId, { $set: data }, { new: true }).populate("participants", "_id username email avatar images");
     if (!chat) {
       return res.status(404).json({ error: "Chat not found" });
+    }
+
+    // Find the other user (avoid index reliance)
+    const otherUser = chat.participants.find(p => String(p._id) !== String(userId));
+
+    if (otherUser) {
+      await Notification.create({
+        userId: otherUser._id,
+        title: "Chat Status Updated",
+        avatar: otherUser.avatar || (otherUser.images?.[0] ?? null),
+        type: "other",
+        link: `/dashboard/chats`,
+        message: `Your chat room status has been updated to ${status}`,
+      });
     }
 
 
@@ -149,14 +164,14 @@ export const getEventChats = async (req, res) => {
   try {
     const { userId } = req.params;
     const chats = await Chat.find({ participants: userId, type: 'event' })
-      .populate("participants", "username email avatar")
+      .populate("participants", "username email avatar images")
       .sort({ createdAt: -1 });
 
     // Get last message and unread count for each chat
     const chatsWithLastMessage = await Promise.all(
       chats.map(async (chat) => {
         const lastMessage = await Message.findOne({ chatId: chat._id })
-          .populate("sender", "username email avatar")
+          .populate("sender", "username email avatar images")
           .sort({ timestamp: -1 })
           .limit(1);
 

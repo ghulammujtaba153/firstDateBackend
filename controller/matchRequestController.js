@@ -1,5 +1,6 @@
 import MatchRequest from "../models/matchRequest.js";
 import Chat from "../models/chatModel.js";
+import Notification from "../models/notificationModel.js";
 
 export const createMatchRequest = async (req, res) => {
   try {
@@ -51,6 +52,20 @@ export const createMatchRequest = async (req, res) => {
       requestedTo,
       status: "pending",
     });
+
+    const requestInfo = await MatchRequest.findById(newRequest._id).populate("userId").populate("requestedTo");
+    console.log(requestInfo)
+    const NotificationData = {
+      userId: requestInfo.requestedTo._id,
+      title: "Match Request Incoming",
+      avatar: requestInfo.userId.avatar || requestInfo.userId.images[0],
+      type: "match",
+      link: `/dashboard/events-chat`,
+      message: `You have received a match request from ${requestInfo.userId.username}`,
+
+    }
+
+    await Notification.create(NotificationData)
 
     // Emit socket event to notify the receiver in real-time
     const io = req.app.get("io");
@@ -105,6 +120,20 @@ export const acceptMatchRequest = async (req, res) => {
       { new: true }
     );
     if (!request) return res.status(404).json({ error: "Match request not found" });
+
+    const requestInfo = await MatchRequest.findById(request._id).populate("userId").populate("requestedTo");
+
+    const NotificationData = {
+      userId: requestInfo.userId._id,
+      title: "Match Request Accepted",
+      avatar: requestInfo.requestedTo.avatar || requestInfo.requestedTo.images[0],
+      type: "match",
+      link: `/dashboard/chats`,
+      message: `Your request for match has been accepted`,
+
+    }
+
+    await Notification.create(NotificationData)
 
     // Ensure only one private chat exists between users
     const existingChat = await Chat.findOne({
