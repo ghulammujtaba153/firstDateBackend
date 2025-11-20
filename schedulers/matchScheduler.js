@@ -26,7 +26,7 @@ export const initMatchScheduler = (io) => {
 
   // ⭐ MATCH CREATION (LOCK WINDOW STARTS)
   // → Tuesday 11:01 PM (algorithm runs, status = "pending")
-  cron.schedule("50 11 * * 3", async () => {
+  cron.schedule("1 23 * * 2", async () => {
     try {
       console.log("[matchScheduler] Running Tuesday 11:01 PM matching algorithm");
 
@@ -36,6 +36,27 @@ export const initMatchScheduler = (io) => {
         console.log("[matchScheduler] Not enough users opted in");
         return;
       }
+
+      // Get all previous matches to avoid repeat pairings
+      const previousMatches = await CoupleMatch.find({
+        status: { $in: ["matched", "pending", "accepted"] }
+      }).lean();
+
+      // Create a set of previous pairings (user1_id:user2_id)
+      const previousPairings = new Set();
+      previousMatches.forEach((match) => {
+        if (match.couple && match.couple.length === 2) {
+          const [id1, id2] = match.couple.map(id => String(id));
+          // Store both directions to check either way
+          previousPairings.add(`${id1}:${id2}`);
+          previousPairings.add(`${id2}:${id1}`);
+        }
+      });
+
+      // Helper function to check if two users were previously matched
+      const werePreviouslyMatched = (userId1, userId2) => {
+        return previousPairings.has(`${String(userId1)}:${String(userId2)}`);
+      };
 
       // Split by gender
       const males = users.filter((u) => u.gender?.toLowerCase() === "man");
@@ -48,10 +69,16 @@ export const initMatchScheduler = (io) => {
       for (const male of males) {
         if (used.has(String(male._id))) continue;
 
-        // available females
-        const pool = females.filter((f) => !used.has(String(f._id)));
+        // available females (not used and not previously matched with this male)
+        const pool = females.filter((f) =>
+          !used.has(String(f._id)) &&
+          !werePreviouslyMatched(male._id, f._id)
+        );
 
-        if (pool.length === 0) continue;
+        if (pool.length === 0) {
+          console.log(`[matchScheduler] No available new matches for user ${male._id}`);
+          continue;
+        }
 
         let best = null;
         let bestScore = -Infinity;
@@ -76,7 +103,7 @@ export const initMatchScheduler = (io) => {
       }
 
       if (matchesToCreate.length === 0) {
-        console.log("[matchScheduler] No valid opposite-gender matches");
+        console.log("[matchScheduler] No valid opposite-gender matches (all users may have been previously matched)");
         return;
       }
 

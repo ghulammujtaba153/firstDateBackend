@@ -5,8 +5,8 @@ import mongoose from "mongoose";
 const coupleMatchSchema = new mongoose.Schema({
     couple: [
         {
-          type: mongoose.Schema.Types.ObjectId,
-          ref: "User",
+            type: mongoose.Schema.Types.ObjectId,
+            ref: "User",
         },
     ],
     status: {
@@ -14,8 +14,8 @@ const coupleMatchSchema = new mongoose.Schema({
         enum: ["pending", "matched", "unmatched", "old"],
         default: "pending"
     },
-    
-});
+
+}, { timestamps: true });
 
 
 const CoupleMatch = mongoose.model("CoupleMatch", coupleMatchSchema);

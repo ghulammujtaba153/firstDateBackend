@@ -56,12 +56,13 @@ export const updateChatStatus = async (req, res) => {
       status,
     };
 
-    if(status === 'inactive'){
-      data.blockedBy= userId
+    if (status === 'inactive') {
+      data.blockedBy = userId
     }
 
-    if(status == 'active'){
-      data.blockedBy= null
+
+    if (status == 'active') {
+      data.blockedBy = null
     }
 
     const chat = await Chat.findByIdAndUpdate(chatId, { $set: data }, { new: true }).populate("participants", "_id");
@@ -70,7 +71,7 @@ export const updateChatStatus = async (req, res) => {
     }
 
 
-    
+
 
     // Emit socket event to notify all participants about chat status update
     const io = req.app.get('io');
@@ -145,47 +146,47 @@ export const getUserChats = async (req, res) => {
 
 
 export const getEventChats = async (req, res) => {
-    try {
-      const { userId } = req.params;
-      const chats = await Chat.find({ participants: userId, type: 'event' })
-        .populate("participants", "username email avatar")
-        .sort({ createdAt: -1 });
-  
-      // Get last message and unread count for each chat
-      const chatsWithLastMessage = await Promise.all(
-        chats.map(async (chat) => {
-          const lastMessage = await Message.findOne({ chatId: chat._id })
-            .populate("sender", "username email avatar")
-            .sort({ timestamp: -1 })
-            .limit(1);
-  
-          // Count unread messages (messages not sent by current user and status is not 'read')
-          const unreadCount = await Message.countDocuments({
-            chatId: chat._id,
-            sender: { $ne: userId },
-            status: { $ne: 'read' }
-          });
-  
-          return {
-            ...chat.toObject(),
-            lastMessage: lastMessage || null,
-            unreadCount: unreadCount || 0,
-          };
-        })
-      );
-  
-      // Sort by last message timestamp (most recent first)
-      chatsWithLastMessage.sort((a, b) => {
-        const aTime = a.lastMessage?.timestamp || a.createdAt || 0;
-        const bTime = b.lastMessage?.timestamp || b.createdAt || 0;
-        return new Date(bTime) - new Date(aTime);
-      });
-  
-      res.status(200).json(chatsWithLastMessage);
-    } catch (error) {
-      res.status(500).json({ error: error.message });
-    }
-  
+  try {
+    const { userId } = req.params;
+    const chats = await Chat.find({ participants: userId, type: 'event' })
+      .populate("participants", "username email avatar")
+      .sort({ createdAt: -1 });
+
+    // Get last message and unread count for each chat
+    const chatsWithLastMessage = await Promise.all(
+      chats.map(async (chat) => {
+        const lastMessage = await Message.findOne({ chatId: chat._id })
+          .populate("sender", "username email avatar")
+          .sort({ timestamp: -1 })
+          .limit(1);
+
+        // Count unread messages (messages not sent by current user and status is not 'read')
+        const unreadCount = await Message.countDocuments({
+          chatId: chat._id,
+          sender: { $ne: userId },
+          status: { $ne: 'read' }
+        });
+
+        return {
+          ...chat.toObject(),
+          lastMessage: lastMessage || null,
+          unreadCount: unreadCount || 0,
+        };
+      })
+    );
+
+    // Sort by last message timestamp (most recent first)
+    chatsWithLastMessage.sort((a, b) => {
+      const aTime = a.lastMessage?.timestamp || a.createdAt || 0;
+      const bTime = b.lastMessage?.timestamp || b.createdAt || 0;
+      return new Date(bTime) - new Date(aTime);
+    });
+
+    res.status(200).json(chatsWithLastMessage);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+
 };
 
 /**
@@ -223,7 +224,7 @@ export const sendMessage = async (req, res) => {
     });
 
     const populatedMessage = await message.populate("sender", "username email avatar");
-    
+
     // Emit Socket.io event to notify all users in the chat room
     const io = req.app.get('io');
     if (io) {
