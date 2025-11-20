@@ -3,13 +3,13 @@ import MatchRefreshTimer from "../models/matchRefreshTimer.js"
 import mongoose from "mongoose"
 
 
-export const getRecomendedUsers = async(req, res) => {
+export const getRecomendedUsers = async (req, res) => {
     const { id } = req.params
 
     try {
         // Get current user to determine opposite gender
         let oppositeGender = null;
-        
+
         if (id && mongoose.Types.ObjectId.isValid(id)) {
             const currentUser = await User.findById(id);
             if (currentUser && currentUser.gender) {
@@ -22,18 +22,18 @@ export const getRecomendedUsers = async(req, res) => {
                 }
             }
         }
-        
+
         // Build query for opposite gender users
-        const query = { 
+        const query = {
             onboardingComlete: true,
             _id: { $ne: id } // Exclude current user
         };
-        
+
         // Filter by opposite gender if available
         if (oppositeGender) {
             query.gender = { $regex: new RegExp(`^${oppositeGender}$`, "i") };
         }
-        
+
         // Fetch users with opposite gender, limit to 2
         const users = await User.find(query).limit(2);
         res.status(200).json(users)
@@ -46,16 +46,16 @@ export const getRecomendedUsers = async(req, res) => {
 export const getAllUsers = async (req, res) => {
     try {
         const userId = req.user?.id || req.query?.userId;
-        
+
         // Validate userId if provided
         if (userId && !mongoose.Types.ObjectId.isValid(userId)) {
             return res.status(400).json({ error: "Invalid user ID" });
         }
-        
+
         // Get current user to determine opposite gender
         let currentUser = null;
         let oppositeGender = null;
-        
+
         if (userId) {
             currentUser = await User.findById(userId);
             if (currentUser && currentUser.gender) {
@@ -69,10 +69,10 @@ export const getAllUsers = async (req, res) => {
                 // If "other", we can show all genders or handle differently
             }
         }
-        
+
         // Get or create timer for user (only if userId is provided)
         let timer = userId ? await MatchRefreshTimer.findOne({ userId }) : null;
-        
+
         // If userId is provided, handle timer logic
         if (userId) {
             // If no timer exists or timer has expired, create/reset it
@@ -80,7 +80,7 @@ export const getAllUsers = async (req, res) => {
             if (!timer || timer.expiresAt <= now) {
                 // Set timer to expire in 7 days
                 const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-                
+
                 if (timer) {
                     // Update existing timer
                     timer.expiresAt = expiresAt;
@@ -96,23 +96,23 @@ export const getAllUsers = async (req, res) => {
                 }
             }
         }
-        
+
         // Build query for opposite gender users
         const query = { onboardingComlete: true };
-        
+
         // Exclude current user
         if (userId) {
             query._id = { $ne: userId };
         }
-        
+
         // Filter by opposite gender if available
         if (oppositeGender) {
             query.gender = { $regex: new RegExp(`^${oppositeGender}$`, "i") };
         }
-        
+
         // Fetch users with opposite gender, limit to 2
         const users = await User.find(query).limit(2);
-        
+
         // Return response with or without timer data
         if (userId && timer) {
             res.status(200).json({
@@ -135,18 +135,18 @@ export const getAllUsers = async (req, res) => {
 export const getTimerStatus = async (req, res) => {
     try {
         const userId = req.user?.id || req.query?.userId;
-        
+
         if (!userId) {
             return res.status(400).json({ error: "User ID is required" });
         }
-        
+
         if (!mongoose.Types.ObjectId.isValid(userId)) {
             return res.status(400).json({ error: "Invalid user ID" });
         }
-        
+
         let timer = await MatchRefreshTimer.findOne({ userId });
         const now = new Date();
-        
+
         // If no timer exists, create one
         if (!timer) {
             const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
@@ -156,10 +156,10 @@ export const getTimerStatus = async (req, res) => {
                 lastRefreshAt: now,
             });
         }
-        
+
         // Check if timer has expired
         const isExpired = timer.expiresAt <= now;
-        
+
         res.status(200).json({
             expiresAt: timer.expiresAt,
             lastRefreshAt: timer.lastRefreshAt,
@@ -176,19 +176,19 @@ export const getTimerStatus = async (req, res) => {
 export const resetTimerAndGetNewMatches = async (req, res) => {
     try {
         const userId = req.user?.id || req.query?.userId;
-        
+
         if (!userId) {
             return res.status(400).json({ error: "User ID is required" });
         }
-        
+
         if (!mongoose.Types.ObjectId.isValid(userId)) {
             return res.status(400).json({ error: "Invalid user ID" });
         }
-        
+
         // Get current user to determine opposite gender
         const currentUser = await User.findById(userId);
         let oppositeGender = null;
-        
+
         if (currentUser && currentUser.gender) {
             // Determine opposite gender
             const userGender = currentUser.gender.toLowerCase();
@@ -198,10 +198,10 @@ export const resetTimerAndGetNewMatches = async (req, res) => {
                 oppositeGender = "man";
             }
         }
-        
+
         const now = new Date();
         const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-        
+
         // Update or create timer
         let timer = await MatchRefreshTimer.findOneAndUpdate(
             { userId },
@@ -211,21 +211,21 @@ export const resetTimerAndGetNewMatches = async (req, res) => {
             },
             { upsert: true, new: true }
         );
-        
+
         // Build query for opposite gender users
-        const query = { 
+        const query = {
             onboardingComlete: true,
             _id: { $ne: userId } // Exclude current user
         };
-        
+
         // Filter by opposite gender if available
         if (oppositeGender) {
             query.gender = { $regex: new RegExp(`^${oppositeGender}$`, "i") };
         }
-        
+
         // Fetch new users with opposite gender, limit to 2
         const users = await User.find(query).limit(2);
-        
+
         res.status(200).json({
             users,
             timer: {
@@ -245,24 +245,24 @@ export const getUserStats = async (req, res) => {
     try {
         // Total users
         const totalUsers = await User.countDocuments();
-        
+
         // Active users (completed onboarding)
         const activeUsers = await User.countDocuments({ onboardingComlete: true });
-        
+
         // Premium users
-        const premiumUsers = await User.countDocuments({ 
+        const premiumUsers = await User.countDocuments({
             isPremium: true,
             premiumUntil: { $gt: new Date() } // Premium is still valid
         });
-        
+
         // Flagged users (can be based on reports or other criteria - for now using verified status as inverse)
         // You can modify this based on your flagging logic
         const flaggedUsers = await User.countDocuments({ verified: false });
-        
+
         // Calculate percentage changes (mock for now, can be enhanced with historical data)
         const activePercentage = totalUsers > 0 ? ((activeUsers / totalUsers) * 100).toFixed(1) : 0;
         const premiumPercentage = totalUsers > 0 ? ((premiumUsers / totalUsers) * 100).toFixed(1) : 0;
-        
+
         res.status(200).json({
             totalUsers,
             activeUsers,
@@ -284,10 +284,10 @@ export const getAllUsersForAdmin = async (req, res) => {
         const limit = parseInt(req.query.limit) || 10;
         const search = req.query.search || '';
         const statusFilter = req.query.status || 'all';
-        
+
         // Build query
         const query = {};
-        
+
         // Search filter
         if (search) {
             query.$or = [
@@ -295,7 +295,7 @@ export const getAllUsersForAdmin = async (req, res) => {
                 { email: { $regex: search, $options: 'i' } },
             ];
         }
-        
+
         // Status filter
         if (statusFilter === 'active') {
             query.onboardingComlete = true;
@@ -305,10 +305,10 @@ export const getAllUsersForAdmin = async (req, res) => {
             // You can add a suspended field to user model if needed
             query.verified = false;
         }
-        
+
         // Get total count for pagination
         const total = await User.countDocuments(query);
-        
+
         // Get users with pagination
         const users = await User.find(query)
             .select('-password') // Exclude password
@@ -316,55 +316,11 @@ export const getAllUsersForAdmin = async (req, res) => {
             .skip((page - 1) * limit)
             .limit(limit)
             .lean();
-        
-        // Format users for admin dashboard
-        const formattedUsers = users.map(user => {
-            // Determine status
-            let status = 'inactive';
-            if (user.onboardingComlete) {
-                status = user.verified ? 'active' : 'suspended';
-            }
-            
-            // Determine subscription
-            let subscription = 'basic';
-            if (user.isPremium && user.premiumUntil && new Date(user.premiumUntil) > new Date()) {
-                subscription = 'premium';
-            }
-            
-            // Calculate attractiveness score (mock - you can implement real scoring)
-            const attractivenessScore = (Math.random() * 2 + 7).toFixed(1); // Random between 7-9
-            
-            // Format location
-            const location = user.location?.latitude && user.location?.longitude 
-                ? `Lat: ${user.location.latitude.toFixed(2)}, Lng: ${user.location.longitude.toFixed(2)}`
-                : 'Not set';
-            
-            // Calculate last active (mock - you can add lastActive field to user model)
-            const lastActive = user.updatedAt 
-                ? getTimeAgo(new Date(user.updatedAt))
-                : 'Never';
-            
-            return {
-                id: user._id.toString(),
-                name: user.username || user.email?.split('@')[0] || 'Unknown',
-                email: user.email || 'No email',
-                status,
-                subscription,
-                joinDate: new Date(user.createdAt).toISOString().split('T')[0],
-                attractivenessScore: parseFloat(attractivenessScore),
-                flagged: !user.verified,
-                location,
-                lastActive,
-                avatar: user.avatar,
-                gender: user.gender,
-                verified: user.verified,
-                isPremium: user.isPremium,
-                premiumUntil: user.premiumUntil,
-            };
-        });
-        
+
+
+
         res.status(200).json({
-            users: formattedUsers,
+            users: users,
             pagination: {
                 page,
                 limit,
@@ -381,7 +337,7 @@ export const getAllUsersForAdmin = async (req, res) => {
 // Helper function to calculate time ago
 function getTimeAgo(date) {
     const seconds = Math.floor((new Date() - date) / 1000);
-    
+
     if (seconds < 60) return `${seconds} seconds ago`;
     if (seconds < 3600) return `${Math.floor(seconds / 60)} minutes ago`;
     if (seconds < 86400) return `${Math.floor(seconds / 3600)} hours ago`;
