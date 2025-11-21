@@ -1,7 +1,7 @@
 import User from "../models/user.js"
 import MatchRefreshTimer from "../models/matchRefreshTimer.js"
 import mongoose from "mongoose"
-
+import Subscription from "../models/subscriptionModel.js"
 
 export const getRecomendedUsers = async (req, res) => {
     const { id } = req.params

@@ -19,6 +19,7 @@ import dashboardStatsRouter from './dashboardStatsRoutes.js';
 import matchRequestRouter from './matchRequestRoutes.js';
 import CoupleMatchRouter from './coupleMatchRoutes.js';
 import packageRouter from './packageRoutes.js';
+import reportRouter from './reportAnalyticsRoutes.js';
 
 const router = express.Router();
 
@@ -43,6 +44,7 @@ router.use("/dashboard", dashboardStatsRouter)
 router.use("/match-requests", matchRequestRouter)
 router.use("/couple", CoupleMatchRouter)
 router.use("/package", packageRouter)
+router.use("/report", reportRouter)
 
 export default router;
 
