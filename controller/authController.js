@@ -6,25 +6,25 @@ import SibApiV3Sdk from "sib-api-v3-sdk";
 
 
 export const registerUser = async (req, res) => {
-    const {email, phone, password} = req.body
-    try {
-        // Check if user already exists
-        const existingUser = await User.findOne({ email: req.body.email });
-        if (existingUser) {
-            return res.status(400).json({ error: "User already exists" });
-        }
-
-        // Hash password
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(req.body.password, salt);
-        req.body.password = hashedPassword;
-
-        const user = await User.create({ email, phone, password: hashedPassword });
-        res.status(201).json(user);
-    } catch (error) {
-        console.error(error.message);
-        res.status(500).json({ error: "Server error" });
+  const { email, phone, password } = req.body
+  try {
+    // Check if user already exists
+    const existingUser = await User.findOne({ email: req.body.email });
+    if (existingUser) {
+      return res.status(400).json({ error: "User already exists" });
     }
+
+    // Hash password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(req.body.password, salt);
+    req.body.password = hashedPassword;
+
+    const user = await User.create({ email, phone, password: hashedPassword });
+    res.status(201).json(user);
+  } catch (error) {
+    console.error(error.message);
+    res.status(500).json({ error: "Server error" });
+  }
 }
 
 
@@ -44,8 +44,8 @@ export const loginUser = async (req, res) => {
 
     // Generate JWT token
     const token = jwt.sign(
-      { id: user._id }, 
-      process.env.JWT_SECRET, 
+      { id: user._id },
+      process.env.JWT_SECRET,
       { expiresIn: "7d" } // optional expiry
     );
 
@@ -58,28 +58,28 @@ export const loginUser = async (req, res) => {
 
 
 export const onboarding = async (req, res) => {
-    const { id } = req.params;
+  const { id } = req.params;
 
 
 
-    try {
-        const user = await User.findByIdAndUpdate(id, req.body, { new: true });
-        res.status(200).json(user);
-    } catch (error) {
-        res.status(500).json({ error: "Server error", message: error.message });
-    }
+  try {
+    const user = await User.findByIdAndUpdate(id, req.body, { new: true });
+    res.status(200).json(user);
+  } catch (error) {
+    res.status(500).json({ error: "Server error", message: error.message });
+  }
 }
 
 
 export const updateUser = async (req, res) => {
-    const {id} = req.params;
+  const { id } = req.params;
 
-    try {
-        const updatedUser = await User.findByIdAndUpdate(id, req.body, { new: true });
-        res.status(200).json(updatedUser);
-    } catch (error) {
-        res.status(500).json({ error: "Server error" });
-    }
+  try {
+    const updatedUser = await User.findByIdAndUpdate(id, req.body, { new: true });
+    res.status(200).json(updatedUser);
+  } catch (error) {
+    res.status(500).json({ error: "Server error" });
+  }
 }
 
 
@@ -96,13 +96,13 @@ export const resetPassword = async (req, res) => {
 }
 
 export const getUser = async (req, res) => {
-    const {id} = req.params;
-    try {
-        const user = await User.findById(id);
-        res.status(200).json(user);
-    } catch (error) {
-        res.status(500).json({ error: "Server error" });
-    }
+  const { id } = req.params;
+  try {
+    const user = await User.findById(id);
+    res.status(200).json(user);
+  } catch (error) {
+    res.status(500).json({ error: "Server error" });
+  }
 }
 
 
@@ -131,6 +131,8 @@ export const inviteUser = async (req, res) => {
       role: role || 'user',
       status: 'inactive', // User is inactive until they set password
     });
+
+
 
     // Prepare email content
     const invitationLink = `${process.env.CLIENT_URL}/signup?token=${invitationToken}`;
@@ -174,11 +176,14 @@ export const inviteUser = async (req, res) => {
     // Send invitation email using Brevo
     const sendSmtpEmail = new SibApiV3Sdk.SendSmtpEmail();
     sendSmtpEmail.subject = "Invitation to join First Date";
-    sendSmtpEmail.htmlContent = htmlContent;
-    sendSmtpEmail.sender = { name: "First Date", email: process.env.FROM_EMAIL || "noreply@firstdate.com" };
+    sendSmtpEmail.sender = { name: process.env.BREVO_SENDER_NAME, email: process.env.BREVO_SENDER_EMAIL || process.env.BREVO_FROM };
     sendSmtpEmail.to = [{ email: user.email, name: username || user.email }];
+    sendSmtpEmail.htmlContent = htmlContent;
+
+
 
     await emailApi.sendTransacEmail(sendSmtpEmail);
+
 
     // Return user without sensitive data
     const userResponse = {
@@ -263,7 +268,7 @@ export const resetPasswordofInvitedUser = async (req, res) => {
 
 export const getMe = async (req, res) => {
   try {
-    
+
     const { token } = req.body;
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
@@ -276,7 +281,7 @@ export const getMe = async (req, res) => {
     res.json(user);
   } catch (error) {
     console.error("Error in getMe:", error);
-    
+
     res.status(500).json({ message: "Server error" });
   }
 };

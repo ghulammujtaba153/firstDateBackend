@@ -159,6 +159,7 @@ export const createSubscriptionCheckout = async (req, res) => {
       await user.save();
     }
 
+
     // Create Checkout Session
     const sessionConfig = {
       customer: customerId,
