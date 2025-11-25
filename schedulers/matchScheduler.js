@@ -2,25 +2,27 @@ import cron from "node-cron";
 import User from "../models/user.js";
 import CoupleMatch from "../models/coupleMatchModel.js";
 
-const scorePair = (a, b) => {
-  let score = 0;
+/**
+ * Score pair based on hobby similarity + optional age closeness.
+ */
+const scorePair = (u1, u2) => {
+  const h1 = (u1.hobbies || []).map(h => h.toLowerCase().trim());
+  const h2 = (u2.hobbies || []).map(h => h.toLowerCase().trim());
 
-  if (a.religion && b.religion && a.religion === b.religion) score += 50;
+  // Count common hobbies
+  const common = h1.filter(h => h2.includes(h)).length;
 
-  const hobbiesA = new Set(a.hobbies || []);
-  const hobbiesB = new Set(b.hobbies || []);
-  let sharedHobbies = 0;
-  hobbiesA.forEach((h) => { if (hobbiesB.has(h)) sharedHobbies++; });
-  score += sharedHobbies * 10;
+  // Jaccard similarity: common/unique total (more accurate)
+  const union = new Set([...h1, ...h2]).size;
+  const hobbyScore = union === 0 ? 0 : (common / union); // 0–1
 
-  const persA = new Set(a.personality || []);
-  const persB = new Set(b.personality || []);
-  let sharedPers = 0;
-  persA.forEach((p) => { if (persB.has(p)) sharedPers++; });
-  score += sharedPers * 5;
+  // Optional: Slightly reward smaller age gap
+  const ageGap = (u1.age && u2.age) ? Math.max(0, 20 - Math.abs(u1.age - u2.age)) : 0;
 
-  return score;
+  // Final weighted score
+  return (hobbyScore * 100) + ageGap;  // Scale similarity to 100 + age boost
 };
+
 
 export const initMatchScheduler = (io) => {
 
