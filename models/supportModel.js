@@ -15,6 +15,9 @@ const supportSchema = new mongoose.Schema({
         type: String,
         required: true,
     },
+    reply: {
+        type: String,
+    },
     status: {
         type: String,
         enum: ["pending", "resolved", "closed"],

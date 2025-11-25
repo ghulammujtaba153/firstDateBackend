@@ -1,5 +1,5 @@
 import express from 'express';
-import { getMe, getUser, loginUser, onboarding, registerUser, resetPassword, updateUser, inviteUser } from '../controller/authController.js';
+import { getMe, getUser, loginUser, onboarding, registerUser, resetPassword, updateUser, inviteUser, resetPasswordofInvitedUser } from '../controller/authController.js';
 
 
 
@@ -13,6 +13,7 @@ authRouter.put("/reset-password", resetPassword);
 
 authRouter.put("/:id", updateUser);
 authRouter.get("/:id", getUser);
+authRouter.put("/invite/reset-password/:token", resetPasswordofInvitedUser);
 authRouter.post("/me", getMe);
 
 export default authRouter;

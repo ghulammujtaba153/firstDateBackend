@@ -135,7 +135,7 @@ export const inviteUser = async (req, res) => {
 
 
     // Prepare email content
-    const invitationLink = `${process.env.CLIENT_URL}/signup?token=${invitationToken}`;
+    const invitationLink = `${process.env.CLIENT_URL}/invite?token=${invitationToken}`;
     const htmlContent = `
       <!DOCTYPE html>
       <html>
