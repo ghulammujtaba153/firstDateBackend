@@ -28,7 +28,7 @@ export const initMatchScheduler = (io) => {
 
   // ⭐ MATCH CREATION (LOCK WINDOW STARTS)
   // → Tuesday 11:01 PM (algorithm runs, status = "pending")
-  cron.schedule("30 10 * * 3", async () => {
+  cron.schedule("42 10 * * 3", async () => {
     try {
       console.log("[matchScheduler] Running Tuesday 11:01 PM matching algorithm");
 
@@ -117,7 +117,10 @@ export const initMatchScheduler = (io) => {
     } catch (err) {
       console.error("[matchScheduler] Error during match creation:", err);
     }
-  });
+  }, {
+    timezone: "Asia/Karachi"
+  }
+  );
 
   // ⭐ MATCH REVEAL / DELIVERY
   // → Thursday 12:00 AM (deliver matches, set status = "matched")
@@ -152,6 +155,8 @@ export const initMatchScheduler = (io) => {
     } catch (err) {
       console.error("[matchScheduler] Error during match reveal:", err);
     }
+  }, {
+    timezone: "Asia/Karachi"
   });
 
   // ⭐ RESET OPT-IN + NEW WEEK BEGINS
@@ -165,6 +170,8 @@ export const initMatchScheduler = (io) => {
     } catch (err) {
       console.error("[matchScheduler] Opt-in reset error:", err);
     }
+  }, {
+    timezone: "Asia/Karachi"
   });
 
   console.log("[matchScheduler] ALL CRON JOBS INITIALIZED");
