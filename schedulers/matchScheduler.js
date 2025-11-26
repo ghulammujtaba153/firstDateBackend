@@ -28,7 +28,7 @@ export const initMatchScheduler = (io) => {
 
   // ⭐ MATCH CREATION (LOCK WINDOW STARTS)
   // → Tuesday 11:01 PM (algorithm runs, status = "pending")
-  cron.schedule("1 23 * * 2", async () => {
+  cron.schedule("30 10 * * 3", async () => {
     try {
       console.log("[matchScheduler] Running Tuesday 11:01 PM matching algorithm");
 
