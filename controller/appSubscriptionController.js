@@ -2,6 +2,7 @@ import Stripe from 'stripe';
 import User from '../models/user.js';
 import Subscription from '../models/subscriptionModel.js';
 import Package from '../models/packageModel.js';
+import Payment from '../models/paymentModel.js';
 import mongoose from 'mongoose';
 import { isDBConnected } from '../database/db.js';
 
@@ -713,12 +714,13 @@ export const getSubscriptionStats = async (req, res) => {
       });
     }
 
+    // App Subscriptions Stats
     const activeSubscriptions = await Subscription.countDocuments({
       status: 'active'
     });
 
     const activeSubs = await Subscription.find({ status: 'active' });
-    const monthlyRevenue = activeSubs.reduce((total, sub) => {
+    const subscriptionRevenue = activeSubs.reduce((total, sub) => {
       return total + (sub.price || 0);
     }, 0);
 
@@ -726,33 +728,51 @@ export const getSubscriptionStats = async (req, res) => {
       status: { $in: ['past_due', 'unpaid'] }
     });
 
-    const totalUsers = await User.countDocuments();
+    // Event Payments Stats
+    const succeededPayments = await Payment.find({ paymentStatus: 'succeeded' });
+    const eventPaymentRevenue = succeededPayments.reduce((total, payment) => {
+      return total + (payment.amount || 0);
+    }, 0);
 
-    const conversionRate = totalUsers > 0
-      ? ((activeSubscriptions / totalUsers) * 100).toFixed(1)
-      : 0;
+    // Total Revenue
+    const totalRevenue = subscriptionRevenue + eventPaymentRevenue;
 
+    // Calculate previous month estimates (using 92% as before)
     const previousMonthActive = Math.floor(activeSubscriptions * 0.92);
-    const previousMonthRevenue = Math.floor(monthlyRevenue * 0.92);
+    const previousMonthSubscriptionRevenue = Math.floor(subscriptionRevenue * 0.92);
+    const previousMonthEventRevenue = Math.floor(eventPaymentRevenue * 0.92);
+    const previousMonthTotalRevenue = previousMonthSubscriptionRevenue + previousMonthEventRevenue;
     const previousMonthFailed = Math.max(0, failedPayments - 3);
 
+    // Calculate changes
     const activeChange = activeSubscriptions - previousMonthActive;
-    const revenueChange = monthlyRevenue - previousMonthRevenue;
+    const subscriptionRevenueChange = subscriptionRevenue - previousMonthSubscriptionRevenue;
+    const eventRevenueChange = eventPaymentRevenue - previousMonthEventRevenue;
+    const totalRevenueChange = totalRevenue - previousMonthTotalRevenue;
     const failedChange = failedPayments - previousMonthFailed;
 
     res.status(200).json({
       activeSubscriptions,
-      monthlyRevenue: Math.round(monthlyRevenue * 100) / 100,
+      subscriptionRevenue: Math.round(subscriptionRevenue * 100) / 100,
+      eventPaymentRevenue: Math.round(eventPaymentRevenue * 100) / 100,
+      totalRevenue: Math.round(totalRevenue * 100) / 100,
       failedPayments,
-      conversionRate: parseFloat(conversionRate),
       activeChange,
-      revenueChange,
+      subscriptionRevenueChange: Math.round(subscriptionRevenueChange * 100) / 100,
+      eventRevenueChange: Math.round(eventRevenueChange * 100) / 100,
+      totalRevenueChange: Math.round(totalRevenueChange * 100) / 100,
       failedChange,
       activeChangePercent: previousMonthActive > 0
         ? ((activeChange / previousMonthActive) * 100).toFixed(1)
         : '0',
-      revenueChangePercent: previousMonthRevenue > 0
-        ? ((revenueChange / previousMonthRevenue) * 100).toFixed(1)
+      subscriptionRevenueChangePercent: previousMonthSubscriptionRevenue > 0
+        ? ((subscriptionRevenueChange / previousMonthSubscriptionRevenue) * 100).toFixed(1)
+        : '0',
+      eventRevenueChangePercent: previousMonthEventRevenue > 0
+        ? ((eventRevenueChange / previousMonthEventRevenue) * 100).toFixed(1)
+        : '0',
+      totalRevenueChangePercent: previousMonthTotalRevenue > 0
+        ? ((totalRevenueChange / previousMonthTotalRevenue) * 100).toFixed(1)
         : '0',
     });
   } catch (error) {
@@ -775,18 +795,33 @@ export const getAllSubscriptionsForAdmin = async (req, res) => {
     const statusFilter = req.query.status || 'all';
     const search = req.query.search || '';
 
-    const query = {};
+    // Build query for subscriptions
+    const subscriptionQuery = {};
 
     if (statusFilter !== 'all') {
       if (statusFilter === 'Active') {
-        query.status = 'active';
+        subscriptionQuery.status = 'active';
       } else if (statusFilter === 'Cancelled') {
-        query.status = 'canceled';
+        subscriptionQuery.status = 'canceled';
       } else if (statusFilter === 'Payment Failed') {
-        query.status = { $in: ['past_due', 'unpaid'] };
+        subscriptionQuery.status = { $in: ['past_due', 'unpaid'] };
       }
     }
 
+    // Build query for payments
+    const paymentQuery = {};
+    if (statusFilter !== 'all') {
+      if (statusFilter === 'Active') {
+        paymentQuery.paymentStatus = 'succeeded';
+      } else if (statusFilter === 'Cancelled') {
+        paymentQuery.paymentStatus = 'refunded';
+      } else if (statusFilter === 'Payment Failed') {
+        paymentQuery.paymentStatus = 'failed';
+      }
+    }
+
+    // Handle search
+    let userIds = [];
     if (search) {
       const users = await User.find({
         $or: [
@@ -795,7 +830,7 @@ export const getAllSubscriptionsForAdmin = async (req, res) => {
         ]
       }).select('_id');
 
-      const userIds = users.map(u => u._id);
+      userIds = users.map(u => u._id);
       if (userIds.length === 0) {
         return res.status(200).json({
           subscriptions: [],
@@ -807,18 +842,24 @@ export const getAllSubscriptionsForAdmin = async (req, res) => {
           },
         });
       }
-      query.userId = { $in: userIds };
+      subscriptionQuery.userId = { $in: userIds };
+      paymentQuery.userId = { $in: userIds };
     }
 
-    const total = await Subscription.countDocuments(query);
-
-    const subscriptions = await Subscription.find(query)
+    // Fetch subscriptions
+    const subscriptions = await Subscription.find(subscriptionQuery)
       .populate('userId', 'username email avatar')
       .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(limit)
       .lean();
 
+    // Fetch payments
+    const payments = await Payment.find(paymentQuery)
+      .populate('userId', 'username email avatar')
+      .populate('eventId', 'title')
+      .sort({ createdAt: -1 })
+      .lean();
+
+    // Format subscriptions
     const formattedSubscriptions = subscriptions.map(sub => {
       const user = sub.userId;
       const userName = user?.username || user?.email?.split('@')[0] || 'Unknown';
@@ -858,6 +899,7 @@ export const getAllSubscriptionsForAdmin = async (req, res) => {
         method: paymentMethod,
         nextBilling,
         joined,
+        type: 'subscription',
         stripeSubscriptionId: sub.stripeSubscriptionId,
         cancelAtPeriodEnd: sub.cancelAtPeriodEnd,
         currentPeriodStart: sub.currentPeriodStart,
@@ -865,8 +907,61 @@ export const getAllSubscriptionsForAdmin = async (req, res) => {
       };
     });
 
+    // Format payments
+    const formattedPayments = payments.map(payment => {
+      const user = payment.userId;
+      const userName = user?.username || user?.email?.split('@')[0] || 'Unknown';
+      const userEmail = user?.email || 'No email';
+      const eventTitle = payment.eventId?.title || 'Unknown Event';
+
+      let status = 'Active';
+      if (payment.paymentStatus === 'succeeded') {
+        status = 'Active';
+      } else if (payment.paymentStatus === 'refunded') {
+        status = 'Cancelled';
+      } else if (payment.paymentStatus === 'failed') {
+        status = 'Payment Failed';
+      } else if (payment.paymentStatus === 'pending') {
+        status = 'Pending';
+      }
+
+      const amount = `$${payment.amount?.toFixed(2) || '0.00'}`;
+      const paymentMethod = 'Stripe';
+      const joined = payment.createdAt
+        ? new Date(payment.createdAt).toISOString().split('T')[0]
+        : 'N/A';
+
+      return {
+        id: payment._id.toString(),
+        userId: payment.userId?._id?.toString() || '',
+        user: userName,
+        email: userEmail,
+        plan: eventTitle,
+        status,
+        amount,
+        method: paymentMethod,
+        nextBilling: 'N/A',
+        joined,
+        type: 'event',
+        paymentIntentId: payment.paymentIntentId,
+        paymentStatus: payment.paymentStatus,
+        eventId: payment.eventId?._id?.toString() || '',
+      };
+    });
+
+    // Merge and sort all records
+    const allRecords = [...formattedSubscriptions, ...formattedPayments].sort((a, b) => {
+      return new Date(b.joined) - new Date(a.joined);
+    });
+
+    // Apply pagination
+    const total = allRecords.length;
+    const startIndex = (page - 1) * limit;
+    const endIndex = startIndex + limit;
+    const paginatedRecords = allRecords.slice(startIndex, endIndex);
+
     res.status(200).json({
-      subscriptions: formattedSubscriptions,
+      subscriptions: paginatedRecords,
       pagination: {
         page,
         limit,
